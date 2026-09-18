@@ -6,6 +6,7 @@ import AppShell from "@/components/AppShell";
 import ScrollToTop from "@/components/ScrollToTop";
 import PageNotFound from "@/lib/PageNotFound";
 import Admin from "@/pages/Admin";
+import Auth from "@/pages/Auth";
 import Bocha from "@/pages/Bocha";
 import Cashier from "@/pages/Cashier";
 import CoinFlip from "@/pages/CoinFlip";
@@ -24,6 +25,8 @@ function App() {
         <Routes>
           <Route element={<AppShell />}>
             <Route path="/" element={<Home />} />
+            <Route path="/entrar" element={<Auth mode="login" />} />
+            <Route path="/cadastro" element={<Auth mode="register" />} />
             <Route path="/dama" element={<Dama />} />
             <Route path="/bocha" element={<Bocha />} />
             <Route path="/futebol" element={<Futebol />} />

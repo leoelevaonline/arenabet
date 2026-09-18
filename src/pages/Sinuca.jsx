@@ -13,6 +13,10 @@ import {
   Trophy,
 } from "lucide-react";
 import confetti from "canvas-confetti";
+import LoginGate from "@/components/LoginGate";
+import MatchmakingPanel from "@/components/MatchmakingPanel";
+import OpponentSelect from "@/components/OpponentSelect";
+import { BOT_OPPONENT, canControlTurn, isHumanOpponent, sideLabel } from "@/lib/opponent";
 import { abandonMatch, getHouseConfig, getBalance, placeBet, settleMatch } from "@/lib/wallet";
 import { drawSurface } from "@/lib/gameSurfaces";
 import { tablePoint, tableTransform } from "@/lib/canvasTable";
@@ -1031,10 +1035,13 @@ function drawAimPreview(ctx, aim) {
 }
 
 export default function Sinuca() {
-  const { refreshBalance } = useOutletContext() || {};
+  const { refreshBalance, user, authReady } = useOutletContext() || {};
   const [balance, setBalance] = useState(null);
   const [config, setConfig] = useState(null);
   const [bet, setBet] = useState(50);
+  const [opponentMode, setOpponentMode] = useState("bot");
+  const [opponent, setOpponent] = useState(BOT_OPPONENT);
+  const [searching, setSearching] = useState(false);
   const [match, setMatch] = useState(null);
   const [turn, setTurn] = useState("player");
   const [groups, setGroups] = useState({ player: null, ai: null });
@@ -1058,6 +1065,8 @@ export default function Sinuca() {
   const configRef = useRef(null);
   const betRef = useRef(50);
   const turnRef = useRef("player");
+  const opponentRef = useRef(BOT_OPPONENT);
+  opponentRef.current = opponent;
   const resultRef = useRef(null);
   const resolvingRef = useRef(false);
   const mountedRef = useRef(true);
@@ -1089,7 +1098,7 @@ export default function Sinuca() {
     const cue = getCue(world);
     if (cue && !cue.pocketed) drawBall(ctx, cue);
 
-    if (matchRef.current && !resultRef.current && turnRef.current === "player" && !animatingRef.current && cue) {
+    if (matchRef.current && !resultRef.current && canControlTurn(turnRef.current, opponentRef.current) && !animatingRef.current && cue) {
       if (aimRef.current) {
         drawAimPreview(ctx, aimRef.current);
         drawCueStick(ctx, cue, aimRef.current.dir, aimRef.current.power);
@@ -1281,7 +1290,7 @@ export default function Sinuca() {
     setPowerPct(0);
     setMoving(true);
     setAiThinking(false);
-    setMessage(shooter === "player" ? "Sua tacada está rolando..." : "A IA executa a combinação escolhida...");
+    setMessage(`${sideLabel(shooter, opponentRef.current)} executa a tacada...`);
     animatingRef.current = true;
     accumulatorRef.current = PHYSICS_STEP;
     lastTickRef.current = performance.now() - 16;
@@ -1322,15 +1331,16 @@ export default function Sinuca() {
     turnRef.current = nextTurn;
     setTurn(nextTurn);
     const nextTurnMessage = nextTurn === shooter
-      ? shooter === "player" ? "Você continua." : "A IA continua."
-      : nextTurn === "player" ? "Sua vez." : "A vez da IA.";
+      ? `${sideLabel(shooter, opponentRef.current)} continua.`
+      : `Vez de ${sideLabel(nextTurn, opponentRef.current)}.`;
     setMessage(resolution.foul
       ? `${resolution.reason} A vez troca e a branca fica livre.`
       : `${resolution.reason} ${nextTurnMessage}`);
-    if (nextTurn === "ai") scheduleAiShot();
+    if (nextTurn === "ai" && !isHumanOpponent(opponentRef.current)) scheduleAiShot();
   }
 
   function scheduleAiShot() {
+    if (isHumanOpponent(opponentRef.current)) return;
     if (!mountedRef.current || !matchRef.current || resultRef.current || turnRef.current !== "ai" || animatingRef.current || resolvingRef.current) return;
     if (aiTimerRef.current) clearTimeout(aiTimerRef.current);
     setAiThinking(true);
@@ -1376,7 +1386,7 @@ export default function Sinuca() {
 
   function onPointerDown(event) {
     if (aimRef.current || placementRef.current) return;
-    if (event.button !== 0 || !matchRef.current || resultRef.current || animatingRef.current || aiThinking || resolvingRef.current || turnRef.current !== "player") return;
+    if (event.button !== 0 || !matchRef.current || resultRef.current || animatingRef.current || aiThinking || resolvingRef.current || !canControlTurn(turnRef.current, opponentRef.current)) return;
     const world = worldRef.current;
     const cue = getCue(world);
     if (!cue || cue.pocketed) return;
@@ -1411,7 +1421,7 @@ export default function Sinuca() {
     if ((placementRef.current || aimRef.current)?.pointerId !== event.pointerId) return;
     const world = worldRef.current;
     const cue = getCue(world);
-    if (!world || !cue || !matchRef.current || resultRef.current || turnRef.current !== "player") return;
+    if (!world || !cue || !matchRef.current || resultRef.current || !canControlTurn(turnRef.current, opponentRef.current)) return;
     const point = toCanvasPoint(event);
     if (placementRef.current) {
       cue.x = clamp(point.x, BED.left + BALL_RADIUS + 2, BED.right - BALL_RADIUS - 2);
@@ -1460,11 +1470,11 @@ export default function Sinuca() {
     aimRef.current = null;
     releasePointer(event);
     setPowerPct(0);
-    if (!matchRef.current || resultRef.current || animatingRef.current || turnRef.current !== "player" || aim.power < 0.08) {
+    if (!matchRef.current || resultRef.current || animatingRef.current || !canControlTurn(turnRef.current, opponentRef.current) || aim.power < 0.08) {
       draw();
       return;
     }
-    fireShot("player", aim.dir, aim.power, aim.preview?.pocket?.id || null);
+    fireShot(turnRef.current, aim.dir, aim.power, aim.preview?.pocket?.id || null);
   }
 
   function onPointerCancel(event) {
@@ -1484,7 +1494,7 @@ export default function Sinuca() {
     draw();
   }
 
-  async function startMatch() {
+  async function startMatch(nextOpponent = opponent) {
     setError("");
     const wager = Number(bet);
     const min = config?.min_bet ?? 10;
@@ -1501,8 +1511,14 @@ export default function Sinuca() {
       setError("Saldo insuficiente");
       return;
     }
+    if (opponentMode === "online" && !isHumanOpponent(nextOpponent)) {
+      setSearching(true);
+      return;
+    }
     setBusy(true);
     try {
+      setOpponent(nextOpponent);
+      opponentRef.current = nextOpponent;
       const newMatch = await placeBet(wager, "sinuca");
       if (!mountedRef.current) {
         void abandonMatch(newMatch, "A partida foi interrompida antes de abrir.").catch(() => {});
@@ -1586,9 +1602,10 @@ export default function Sinuca() {
     })();
   }
 
-  if (loading) {
+  if (!authReady || loading) {
     return <div className="flex justify-center py-20"><Loader2 className="h-6 w-6 animate-spin text-white/40" /></div>;
   }
+  if (!user) return <LoginGate user={user} title="Entre para jogar Sinuca" />;
 
   if (!match) {
     const rake = (config?.rake_percent || 0) / 100;
@@ -1605,7 +1622,17 @@ export default function Sinuca() {
           </div>
           <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-emerald-200/60">Mesa de precisão</div>
           <h1 className="mt-1 font-display text-2xl font-bold">Pool 8-ball</h1>
-          <p className="mt-1 text-sm text-white/55">Quebre o rack, defina seu grupo e limpe a mesa antes de chamar a bola 8. A IA calcula linhas reais até as caçapas.</p>
+          <p className="mt-1 text-sm text-white/55">Quebre o rack, defina seu grupo e limpe a mesa antes de chamar a bola 8. Bot ArenaBet ou adversário online.</p>
+
+          <div className="mt-6">
+            <OpponentSelect
+              value={opponentMode}
+              onChange={(mode) => {
+                setOpponentMode(mode);
+                setOpponent(BOT_OPPONENT);
+              }}
+            />
+          </div>
 
           <div className="mt-6 space-y-2 rounded-xl border border-white/10 bg-white/5 p-4 text-sm">
             <div className="flex justify-between"><span className="text-white/50">Seu saldo</span><span className="font-medium">{formatMoney(balance)}</span></div>
@@ -1633,14 +1660,26 @@ export default function Sinuca() {
           </div>
           {error && <div className="mt-4 rounded-lg bg-rose-500/10 p-3 text-sm text-rose-300">{error}</div>}
           <button
-            onClick={startMatch}
+            onClick={() => startMatch(opponentMode === "bot" ? BOT_OPPONENT : opponent)}
             disabled={busy || balance == null || balance < Number(bet)}
-            className="mt-6 inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-300 to-emerald-600 font-semibold text-black transition hover:from-emerald-200 hover:to-emerald-500 disabled:cursor-not-allowed disabled:opacity-40"
+            className="mt-6 inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#C9A227] font-semibold text-[#14110A] transition hover:bg-[#E0C35A] disabled:cursor-not-allowed disabled:opacity-40"
           >
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Target className="h-4 w-4" />}
-            {busy ? "Preparando a mesa..." : `Iniciar partida · ${formatMoney(bet)} créditos`}
+            {busy ? "Preparando a mesa..." : opponentMode === "online" ? `Procurar adversário · ${formatMoney(bet)} créditos` : `Iniciar partida · ${formatMoney(bet)} créditos`}
           </button>
         </div>
+        {searching && user && (
+          <MatchmakingPanel
+            game="sinuca"
+            bet={bet}
+            user={user}
+            onMatched={(matched) => {
+              setSearching(false);
+              startMatch(matched);
+            }}
+            onCancel={() => setSearching(false)}
+          />
+        )}
       </div>
     );
   }
@@ -1652,12 +1691,10 @@ export default function Sinuca() {
   const statusText = moving
     ? "Bolas em movimento"
     : aiThinking
-      ? "IA pensando"
+      ? `${sideLabel("ai", opponent)} pensando`
       : ballInHand
         ? "Branca em mãos"
-        : turn === "player"
-          ? "Sua vez"
-          : "Vez da IA";
+        : `Vez de ${sideLabel(turn, opponent)}`;
 
   const compactHud = (
     <div className="grid grid-cols-2 gap-2 lg:hidden">
@@ -1745,7 +1782,7 @@ export default function Sinuca() {
           </div>
           <div className={`mt-3 flex items-center gap-2 rounded-xl border px-3 py-2 text-sm ${aiThinking ? "border-rose-300/25 bg-rose-400/10 text-rose-100" : "border-white/10 bg-black/10 text-white/60"}`}>
             {aiThinking ? <BrainCircuit className="h-4 w-4 animate-pulse" /> : <Target className="h-4 w-4" />}
-            {aiThinking ? "Calculando bola, caçapa e ponto fantasma..." : turn === "player" ? "Sua vez · mire pela branca" : "A IA prepara a próxima tacada"}
+            {aiThinking ? "Calculando bola, caçapa e ponto fantasma..." : `${sideLabel(turn, opponent)} · mire pela branca`}
           </div>
         </div>
 

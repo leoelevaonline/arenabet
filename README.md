@@ -2,7 +2,7 @@
 
 Aplicação React/Vite de jogos com apostas em créditos virtuais.
 
-O projeto funciona de forma standalone. Saldo, partidas, transações e configurações são persistidos no `localStorage` do navegador, sem chamadas a serviços externos.
+O projeto funciona de forma standalone. Contas, saldo, partidas, transações e configurações são persistidos no `localStorage` do navegador. A sessão fica no `sessionStorage`, então duas contas podem jogar em abas diferentes do mesmo navegador.
 
 ## Requisitos
 
@@ -23,26 +23,33 @@ npm run dev
 
 Abra o endereço exibido pelo Vite, normalmente `http://localhost:5173`.
 
-## Acesso ao MVP
+## Cadastro e acesso
 
-Não há cadastro ou login. A aplicação abre diretamente no lobby com um perfil local de demonstração e 1.000 créditos iniciais.
+O cadastro exige nome completo, e-mail, CPF, telefone, data de nascimento e senha. Só entram maiores de 18 anos. Carteira e caixa aparecem somente com a conta logada.
+
+Novas contas começam com 1.000 créditos virtuais.
 
 ## Jogos ativos
 
-- `Dama`: partidas contra IA com captura obrigatória e promoção a dama.
+- `Dama`: partidas contra o Bot ArenaBet ou adversário online, com captura obrigatória e promoção a dama.
 - `Sinuca`: mesa 2D com atrito, colisões, caçapas e turnos alternados.
 - `Bocha`: bolim, quatro bolas por lado, alternância de quem está mais distante e pontuação por proximidade.
-- `Futebol de mesa`: jogo autoral de flick soccer com discos, colisões, gols e IA.
+- `Futebol de mesa`: jogo autoral de flick soccer com discos, colisões, gols e IA ou segundo jogador.
+
+Em cada mesa dá para escolher **Bot ArenaBet** ou **adversário online** (fila, mesa aberta ou dois jogadores no mesmo aparelho).
 
 As referências de bocha foram consultadas na [Wikipédia em português](https://pt.wikipedia.org/wiki/Bocha) e na [Wikipédia em inglês](https://en.wikipedia.org/wiki/Bocce), incluindo bolim, cancha, bolas por equipe e pontuação por proximidade. A referência de mecânica do futebol de mesa foi a descrição pública do [Soccer Stars no Google Play](https://play.google.com/store/apps/details?id=com.miniclip.soccerstars): flick, física da bola, partidas por turnos e gols. Os gráficos do ArenaBet são autorais e não reutilizam assets dessas páginas.
 
 ## Persistência local
 
-Os dados ficam armazenados somente no navegador atual. Para reiniciar completamente a aplicação, limpe os dados do site no navegador ou remova estas chaves do `localStorage`:
+Os dados ficam armazenados somente no navegador atual. Para reiniciar completamente a aplicação, limpe os dados do site no navegador ou remova estas chaves:
 
 - `arenabet.local.database.v1`
+- `arenabet.session.v1`
+- `arenabet.rooms.v1`
+- `arenabet.presence.v1`
 
-Esse modo é adequado para desenvolvimento e demonstração. Para uso real com múltiplos usuários, pagamentos ou dados compartilhados, substitua `src/api/localDatabase.js` por uma API segura com banco de dados no servidor.
+Esse modo é adequado para desenvolvimento e demonstração. Para uso real com múltiplos dispositivos, pagamentos ou dados compartilhados, substitua `src/api/localDatabase.js` por uma API segura com banco de dados no servidor.
 
 ## Comandos
 
@@ -72,4 +79,4 @@ A suíte verifica gestos em 1440 × 1000 e 390 × 844, cancelamento de arrasto, 
 - Futebol possui fallback de temporizador quando o navegador suspende quadros de animação.
 - Truco mantém as cartas da última vaza visíveis até a próxima jogada e encerra a mão assim que as regras de empate definem o vencedor.
 
-Ainda são jogos locais contra IA com créditos virtuais. Uma recarga não restaura a posição da mesa; uma partida interrompida pode ser encerrada pela Carteira.
+Os créditos são virtuais. Uma recarga não restaura a posição da mesa; uma partida interrompida pode ser encerrada pela Carteira.

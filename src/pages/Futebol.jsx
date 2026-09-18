@@ -14,6 +14,10 @@ import {
   Trophy,
   Zap,
 } from "lucide-react";
+import LoginGate from "@/components/LoginGate";
+import MatchmakingPanel from "@/components/MatchmakingPanel";
+import OpponentSelect from "@/components/OpponentSelect";
+import { BOT_OPPONENT, canControlTurn, isHumanOpponent, sideLabel } from "@/lib/opponent";
 import { abandonMatch, getBalance, getHouseConfig, placeBet, settleMatch } from "@/lib/wallet";
 import { drawSurface } from "@/lib/gameSurfaces";
 import { requestGameFrame as requestFrame, cancelGameFrame as cancelFrame } from "@/lib/gameFrame";
@@ -974,10 +978,13 @@ function ScorePanel({ playerScore, aiScore, playerShots, aiShots, turn, compact 
 }
 
 export default function Futebol() {
-  const { refreshBalance } = useOutletContext() || {};
+  const { refreshBalance, user, authReady } = useOutletContext() || {};
   const [balance, setBalance] = useState(null);
   const [config, setConfig] = useState(null);
   const [bet, setBet] = useState(50);
+  const [opponentMode, setOpponentMode] = useState("bot");
+  const [opponent, setOpponent] = useState(BOT_OPPONENT);
+  const [searching, setSearching] = useState(false);
   const [match, setMatch] = useState(null);
   const [turn, setTurn] = useState("player");
   const [playerShots, setPlayerShots] = useState(SHOTS_PER_SIDE);
@@ -1002,6 +1009,8 @@ export default function Futebol() {
   const configRef = useRef(null);
   const betRef = useRef(50);
   const turnRef = useRef("player");
+  const opponentRef = useRef(BOT_OPPONENT);
+  opponentRef.current = opponent;
   const playerShotsRef = useRef(SHOTS_PER_SIDE);
   const aiShotsRef = useRef(SHOTS_PER_SIDE);
   const playerScoreRef = useRef(0);
@@ -1102,13 +1111,14 @@ export default function Futebol() {
     const selectedId = aimingRef.current?.id;
     for (const body of renderBodies) {
       if (body.kind !== "disk") continue;
-      const active = body.team === "blue" && turnRef.current === "player" && !animatingRef.current && !kickoffRef.current;
+      const expectedTeam = turnRef.current === "player" ? "blue" : "red";
+      const active = body.team === expectedTeam && canControlTurn(turnRef.current, opponentRef.current) && !animatingRef.current && !kickoffRef.current;
       drawDisk(context, body, body.id === selectedId, active);
     }
     const ball = renderBodies.find((body) => body.kind === "ball");
     if (ball) drawBall(context, ball);
 
-    if (aimingRef.current && aimPointRef.current && turnRef.current === "player" && !animatingRef.current && !kickoffRef.current) {
+    if (aimingRef.current && aimPointRef.current && canControlTurn(turnRef.current, opponentRef.current) && !animatingRef.current && !kickoffRef.current) {
       const body = renderBodies.find((item) => item.id === aimingRef.current.id);
       if (body) drawAimGuide(context, body, aimPointRef.current, aimPreviewRef.current);
     }
@@ -1222,6 +1232,7 @@ export default function Futebol() {
   visualHandlerRef.current = visualFrame;
 
   const scheduleAiShot = useCallback(() => {
+    if (isHumanOpponent(opponentRef.current)) return;
     if (aiTimerRef.current !== null) clearTimeout(aiTimerRef.current);
     setAiThinking(true);
     setMessage("A IA lê ângulos, força e linhas de passe...");
@@ -1251,10 +1262,12 @@ export default function Futebol() {
     if (!nextTurn) return;
     turnRef.current = nextTurn;
     setTurn(nextTurn);
-    if (nextTurn === "ai") scheduleAiShot();
+    if (nextTurn === "ai" && !isHumanOpponent(opponentRef.current)) scheduleAiShot();
     else {
       setAiThinking(false);
-      setMessage("Sua vez: puxe um disco azul para trás.");
+      setMessage(nextTurn === "ai"
+        ? `${sideLabel("ai", opponentRef.current)}: puxe um disco vermelho.`
+        : "Sua vez: puxe um disco azul para trás.");
     }
     draw();
   }, [draw, scheduleAiShot]);
@@ -1469,7 +1482,7 @@ export default function Futebol() {
 
   const updateAim = useCallback((event) => {
     if (aimingRef.current?.pointerId !== event.pointerId) return;
-    if (!aimingRef.current || !matchRef.current || turnRef.current !== "player" || animatingRef.current || kickoffRef.current) return;
+    if (!aimingRef.current || !matchRef.current || !canControlTurn(turnRef.current, opponentRef.current) || animatingRef.current || kickoffRef.current) return;
     const point = toFieldPoint(event);
     if (!point) return;
     aimPointRef.current = point;
@@ -1487,12 +1500,13 @@ export default function Futebol() {
   const onPointerDown = useCallback((event) => {
     if (aimingRef.current) return;
     if (event.pointerType === "mouse" && event.button !== 0) return;
-    if (!matchRef.current || result || resolvingRef.current || animatingRef.current || kickoffRef.current || turnRef.current !== "player") return;
+    if (!matchRef.current || result || resolvingRef.current || animatingRef.current || kickoffRef.current || !canControlTurn(turnRef.current, opponentRef.current)) return;
     const point = toFieldPoint(event);
     if (!point) return;
     const layout = layoutRef.current;
+    const team = turnRef.current === "player" ? "blue" : "red";
     const target = bodiesRef.current
-      .filter((body) => body.team === "blue")
+      .filter((body) => body.team === team)
       .sort((a, b) => distance(a, point) - distance(b, point))[0];
     if (!target) return;
     const hitRadius = Math.max(target.r + 16, 44 / Math.max(layout.scale, 0.01));
@@ -1530,7 +1544,7 @@ export default function Futebol() {
     aimPointRef.current = null;
     aimPreviewRef.current = null;
     if (event.currentTarget.hasPointerCapture?.(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
-    if (!point || !target || !matchRef.current || result || resolvingRef.current || animatingRef.current || kickoffRef.current || turnRef.current !== "player") {
+    if (!point || !target || !matchRef.current || result || resolvingRef.current || animatingRef.current || kickoffRef.current || !canControlTurn(turnRef.current, opponentRef.current)) {
       setPowerPct(0);
       draw();
       return;
@@ -1544,10 +1558,10 @@ export default function Futebol() {
       draw();
       return;
     }
-    fireShotRef.current?.(target.id, "player", { x: pullX / pullDistance, y: pullY / pullDistance }, power);
+    fireShotRef.current?.(target.id, turnRef.current, { x: pullX / pullDistance, y: pullY / pullDistance }, power);
   }, [draw, result]);
 
-  const startMatch = async () => {
+  const startMatch = async (nextOpponent = opponent) => {
     setError("");
     const wager = Number(bet);
     const min = Number(config?.min_bet ?? 10);
@@ -1564,8 +1578,14 @@ export default function Futebol() {
       setError("Saldo insuficiente");
       return;
     }
+    if (opponentMode === "online" && !isHumanOpponent(nextOpponent)) {
+      setSearching(true);
+      return;
+    }
     setBusy(true);
     try {
+      setOpponent(nextOpponent);
+      opponentRef.current = nextOpponent;
       const newMatch = await placeBet(wager, "futebol");
       if (!mountedRef.current) {
         void abandonMatch(newMatch, "A partida foi interrompida antes de abrir.").catch(() => {});
@@ -1666,9 +1686,10 @@ export default function Futebol() {
     }
   }, [cancelKickoffFrame, cancelPhysicsFrame, cancelVisualFrame]);
 
-  if (loading) {
+  if (!authReady || loading) {
     return <div className="flex justify-center py-20" role="status" aria-live="polite"><Loader2 className="h-6 w-6 animate-spin text-white/40" /><span className="sr-only">Carregando arena</span></div>;
   }
+  if (!user) return <LoginGate user={user} title="Entre para jogar Futebol de mesa" />;
 
   if (!match) {
     const rake = Number(config?.rake_percent || 0) / 100;
@@ -1690,7 +1711,16 @@ export default function Futebol() {
               <h1 className="mt-1 font-display text-3xl font-black tracking-tight text-white">Flick <span className="text-sky-300">football</span></h1>
             </div>
           </div>
-          <p className="max-w-md text-sm leading-relaxed text-white/55">Cinco discos por equipe, uma bola e linhas de passe que mudam a cada quique. Vença por 3 gols ou pelo maior placar depois de 6 chutes de cada lado.</p>
+          <p className="max-w-md text-sm leading-relaxed text-white/55">Cinco discos por equipe, uma bola e linhas de passe. Bot ArenaBet ou adversário online.</p>
+          <div className="mt-6">
+            <OpponentSelect
+              value={opponentMode}
+              onChange={(mode) => {
+                setOpponentMode(mode);
+                setOpponent(BOT_OPPONENT);
+              }}
+            />
+          </div>
           <div className="mt-6 grid grid-cols-3 gap-2 rounded-2xl border border-white/10 bg-white/[0.035] p-2 text-center">
             <div className="rounded-xl bg-sky-400/10 px-2 py-3"><div className="text-lg font-black text-sky-200">5</div><div className="text-[10px] uppercase tracking-wider text-white/40">discos azuis</div></div>
             <div className="rounded-xl bg-emerald-400/10 px-2 py-3"><div className="text-lg font-black text-emerald-200">3</div><div className="text-[10px] uppercase tracking-wider text-white/40">gols para vencer</div></div>
@@ -1724,19 +1754,31 @@ export default function Futebol() {
           {error && <div className="mt-4 rounded-xl border border-rose-400/20 bg-rose-500/10 p-3 text-sm text-rose-200" role="alert">{error}</div>}
           <button
             type="button"
-            onClick={startMatch}
+            onClick={() => startMatch(opponentMode === "bot" ? BOT_OPPONENT : opponent)}
             disabled={busy || balance == null || balance < Number(bet)}
-            className="mt-6 inline-flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-400 to-emerald-600 px-4 font-bold text-[#04120c] shadow-[0_12px_26px_-12px_rgba(52,211,153,0.8)] transition hover:from-emerald-300 hover:to-emerald-500 disabled:cursor-not-allowed disabled:opacity-40"
+            className="mt-6 inline-flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl bg-[#C9A227] px-4 font-bold text-[#14110A] transition hover:bg-[#E0C35A] disabled:cursor-not-allowed disabled:opacity-40"
           >
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Crosshair className="h-4 w-4" />}
-            {busy ? "Abrindo arena..." : `Entrar na mesa · ${formatCredits(Number(bet || 0))}`}
+            {busy ? "Abrindo arena..." : opponentMode === "online" ? `Procurar adversário · ${formatCredits(Number(bet || 0))}` : `Entrar na mesa · ${formatCredits(Number(bet || 0))}`}
           </button>
         </div>
+        {searching && user && (
+          <MatchmakingPanel
+            game="futebol"
+            bet={bet}
+            user={user}
+            onMatched={(matched) => {
+              setSearching(false);
+              startMatch(matched);
+            }}
+            onCancel={() => setSearching(false)}
+          />
+        )}
       </div>
     );
   }
 
-  const statusText = message || (aiThinking ? "A IA está calculando..." : turn === "player" ? "Sua vez: arraste um disco azul" : "Vez da IA");
+  const statusText = message || (aiThinking ? "Bot calculando..." : `${sideLabel(turn, opponent)}: arraste um disco ${turn === "player" ? "azul" : "vermelho"}`);
   const topMobileLabel = vertical ? "Gol da IA · ataque azul" : "";
 
   return (
@@ -1818,7 +1860,7 @@ export default function Futebol() {
             </div>
             <h2 id="futebol-result-title" className="relative font-display text-2xl font-black">{result.outcome === "win" ? "Você venceu a mesa" : result.outcome === "draw" ? "Empate técnico" : "A IA levou a partida"}</h2>
             <p className="relative mt-1 text-sm leading-relaxed text-white/55">
-              {result.outcome === "win" ? `Prêmio: +${formatCredits(result.payout - result.bet)} créditos` : result.outcome === "draw" ? "A aposta foi devolvida ao saldo." : `Você perdeu ${formatCredits(result.bet)} créditos.`}
+              {result.outcome === "win" ? `Prêmio: +${formatCredits(result.payout - result.bet)} cr��ditos` : result.outcome === "draw" ? "A aposta foi devolvida ao saldo." : `Você perdeu ${formatCredits(result.bet)} créditos.`}
             </p>
             <div className="relative mt-5 flex items-center justify-center gap-5 text-sm"><span className="font-bold text-sky-200">Azul {result.playerScore}</span><span className="text-white/25">x</span><span className="font-bold text-rose-200">Vermelho {result.aiScore}</span></div>
             <button type="button" onClick={resetGame} className="relative mt-6 inline-flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-400 to-emerald-600 font-bold text-[#04120c] transition hover:from-emerald-300 hover:to-emerald-500"><RotateCcw className="h-4 w-4" /> Jogar novamente</button>
