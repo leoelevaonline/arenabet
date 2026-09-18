@@ -1,12 +1,13 @@
 import React, { useReducer, useEffect, useRef, useState, useCallback } from "react";
 import { Link, useOutletContext } from "react-router-dom";
-import { ArrowLeft, RotateCcw, Loader2, Trophy, Skull, Swords, Check, X } from "lucide-react";
+import { ArrowLeft, RotateCcw, Loader2, Trophy, Skull, Swords, Check, X, Flag } from "lucide-react";
 import confetti from "canvas-confetti";
 import {
   deal, cardRank, compareCards, resolveHand, aiHandStrength,
   SUIT_SYMBOL, SUIT_COLOR,
 } from "@/lib/truco";
 import { abandonMatch, getHouseConfig, getBalance, placeBet, settleMatch } from "@/lib/wallet";
+import { sfx } from "@/lib/sound";
 import LoginGate from "@/components/LoginGate";
 
 const initialState = { phase: "bet" };
@@ -197,6 +198,8 @@ export default function Truco() {
           payout = 2 * wager - houseCut;
           status = "won";
         }
+        if (status === "won") sfx.win();
+        else sfx.lose();
         try {
           const nb = await settleMatch(matchRef.current, status, payout, houseCut);
           settledRef.current = true;
@@ -254,8 +257,35 @@ export default function Truco() {
     (async () => { try { setBalance(await getBalance()); } catch {} })();
   };
 
+  const endMatch = () => {
+    const activeMatch = matchRef.current;
+    if (!activeMatch || state.result || settledRef.current || settlingRef.current) {
+      reset();
+      return;
+    }
+    if (!window.confirm("Encerrar a partida agora conta como derrota e a aposta será perdida. Deseja continuar?")) return;
+    settledRef.current = true;
+    settlingRef.current = true;
+    sfx.end();
+    (async () => {
+      try {
+        await abandonMatch(activeMatch, "Você encerrou a partida.");
+        setBalance(await getBalance());
+        refreshBalance?.();
+      } catch {
+        // A carteira registra a derrota mesmo se a leitura de saldo falhar.
+      } finally {
+        matchRef.current = null;
+        dispatch({ type: "RESET" });
+        setUiResult(null);
+        setError("");
+      }
+    })();
+  };
+
   const playCard = (card) => {
     if (state.turn !== "player" || state.pendingTruco || state.result) return;
+    sfx.card();
     dispatch({ type: "PLAYER_PLAY", card });
   };
   const playerCallTruco = () => {
@@ -331,6 +361,11 @@ export default function Truco() {
             <span className="chip w-3.5 h-3.5 text-amber-400" /> Pote {bet}
           </span>
           <span className="px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-300">Vazas {pWins} × {aWins}</span>
+          {!uiResult && (
+            <button onClick={endMatch} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-rose-500/10 border border-rose-500/30 text-rose-300 hover:bg-rose-500/20 transition">
+              <Flag className="w-3.5 h-3.5" /> Encerrar
+            </button>
+          )}
         </div>
       </div>
 

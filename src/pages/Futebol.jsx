@@ -6,6 +6,7 @@ import {
   CircleDot,
   Coins,
   Crosshair,
+  Flag,
   Loader2,
   RotateCcw,
   ShieldCheck,
@@ -20,6 +21,7 @@ import OpponentSelect from "@/components/OpponentSelect";
 import { BOT_OPPONENT, canControlTurn, isHumanOpponent, sideLabel } from "@/lib/opponent";
 import { abandonMatch, getBalance, getHouseConfig, placeBet, settleMatch } from "@/lib/wallet";
 import { drawSurface } from "@/lib/gameSurfaces";
+import { sfx } from "@/lib/sound";
 import { requestGameFrame as requestFrame, cancelGameFrame as cancelFrame } from "@/lib/gameFrame";
 
 const FIELD_W = 1000;
@@ -1454,6 +1456,9 @@ export default function Futebol() {
         playerScore: playerScoreRef.current,
         aiScore: aiScoreRef.current,
       });
+      if (outcome === "win") sfx.win();
+      else if (outcome === "draw") sfx.draw();
+      else sfx.lose();
     } catch (settlementError) {
       settledRef.current = false;
       resolvingRef.current = false;
@@ -1483,6 +1488,7 @@ export default function Futebol() {
         setAiScore(nextAiScore);
       }
       setMessage(scorer === "player" ? "GOL AZUL · linha encontrada" : "GOL VERMELHO · a IA marcou");
+      sfx.goal();
       startGoalEffect(scoredSide);
       if (messageTimerRef.current !== null) clearTimeout(messageTimerRef.current);
       messageTimerRef.current = setTimeout(() => setMessage(""), 1450);
@@ -1543,6 +1549,7 @@ export default function Futebol() {
     if (!body || body.kind !== "disk") return;
     const normalizedDirection = normalize(direction.x, direction.y);
     const strength = clamp(power, 0, 1);
+    sfx.kick();
     body.vx = normalizedDirection.x * strength * MAX_SHOT_SPEED;
     body.vy = normalizedDirection.y * strength * MAX_SHOT_SPEED;
     shotOwnerRef.current = shooter;
@@ -1730,6 +1737,29 @@ export default function Futebol() {
     }
   };
 
+  const endMatch = () => {
+    const activeMatch = matchRef.current;
+    if (!activeMatch || settledRef.current || resolvingRef.current) {
+      resetGame();
+      return;
+    }
+    if (!window.confirm("Encerrar a partida agora conta como derrota e a aposta será perdida. Deseja continuar?")) return;
+    resolvingRef.current = true;
+    animatingRef.current = false;
+    sfx.end();
+    (async () => {
+      try {
+        await abandonMatch(activeMatch, "Você encerrou a partida.");
+        if (mountedRef.current) setBalance(await getBalance());
+        refreshBalance?.();
+      } catch {
+        // A carteira registra a derrota mesmo se a leitura de saldo falhar.
+      } finally {
+        resetGame();
+      }
+    })();
+  };
+
   const resetGame = () => {
     const activeMatch = matchRef.current;
     if (activeMatch && !settledRef.current && !resolvingRef.current) {
@@ -1895,6 +1925,13 @@ export default function Futebol() {
         <div className="flex flex-wrap items-center justify-end gap-2 text-xs">
           <span className="inline-flex min-h-[40px] items-center gap-1.5 rounded-full border border-amber-400/20 bg-amber-400/10 px-3 text-amber-200"><Coins className="h-3.5 w-3.5" /> Aposta {formatCredits(bet)}</span>
           <span className={`inline-flex min-h-[40px] items-center rounded-full border px-3 ${turn === "player" ? "border-sky-400/25 bg-sky-400/10 text-sky-200" : "border-rose-400/25 bg-rose-400/10 text-rose-200"}`} role="status" aria-live="polite">{statusText}</span>
+          <button
+            type="button"
+            onClick={endMatch}
+            className="inline-flex min-h-[40px] items-center gap-1.5 rounded-full border border-rose-400/30 bg-rose-500/10 px-3 font-semibold text-rose-200 transition hover:bg-rose-500/20"
+          >
+            <Flag className="h-3.5 w-3.5" /> Encerrar partida
+          </button>
         </div>
       </div>
 
