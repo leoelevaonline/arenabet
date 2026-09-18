@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 620" role="img" aria-labelledby="title desc">
+  <title id="title">Mesa de Truco</title>
+  <desc id="desc">Cartas estilizadas sobre uma mesa escura</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" x2="1">
+      <stop stop-color="#09090b"/><stop offset=".55" stop-color="#3f0d1d"/><stop offset="1" stop-color="#881337"/>
+    </linearGradient>
+    <radialGradient id="light"><stop stop-color="#fb7185" stop-opacity=".3"/><stop offset="1" stop-color="#fb7185" stop-opacity="0"/></radialGradient>
+  </defs>
+  <rect width="1600" height="620" fill="url(#bg)"/>
+  <ellipse cx="1190" cy="280" rx="470" ry="330" fill="url(#light)"/>
+  <g transform="translate(1080 300) rotate(-17)">
+    <rect x="-150" y="-220" width="260" height="380" rx="24" fill="#fafafa" stroke="#fecdd3" stroke-width="6"/>
+    <text x="-112" y="-150" font-family="serif" font-size="76" fill="#be123c">A</text>
+    <text x="-50" y="40" font-family="serif" font-size="150" fill="#be123c">♥</text>
+  </g>
+  <g transform="translate(1325 330) rotate(13)">
+    <rect x="-150" y="-220" width="260" height="380" rx="24" fill="#f8fafc" stroke="#cbd5e1" stroke-width="6"/>
+    <text x="-112" y="-150" font-family="serif" font-size="76" fill="#0f172a">K</text>
+    <text x="-48" y="38" font-family="serif" font-size="145" fill="#0f172a">♠</text>
+  </g>
+  <g fill="#fbbf24"><circle cx="940" cy="490" r="44"/><circle cx="1010" cy="520" r="32"/><circle cx="1450" cy="120" r="28" opacity=".7"/></g>
+</svg>
