@@ -239,27 +239,27 @@ export default function Admin() {
       <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-6">
         <div className="flex items-center justify-between flex-wrap gap-2 mb-1">
           <h2 className="font-display font-semibold">Gestão de jogos</h2>
-          <span className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-white/50">
-            <Lock className="w-3 h-3" /> Recurso desativado por enquanto
+          <span className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-300">
+            <span className="h-2 w-2 rounded-full bg-emerald-400" /> Todos os 7 jogos liberados
           </span>
         </div>
-        <p className="text-sm text-white/50 mb-4">Em breve será possível ativar ou desativar cada jogo no salão.</p>
+        <p className="text-sm text-white/50 mb-4">Modalidades disponíveis para apostas e partidas contra bots ou adversários.</p>
         <div className="space-y-2">
           {GAMES.map((g) => (
-            <div key={g.key} className="flex items-center justify-between gap-3 rounded-xl bg-white/[0.03] border border-white/10 px-4 py-3 opacity-60">
+            <div key={g.key} className="flex items-center justify-between gap-3 rounded-xl bg-white/[0.03] border border-white/10 px-4 py-3">
               <div className="flex items-center gap-3">
                 <span className="text-2xl">{g.icon}</span>
                 <div>
                   <div className={`font-medium ${g.accent}`}>{g.name}</div>
-                  <div className="text-xs text-white/40">Ativar/desativar no salão</div>
+                  <div className="text-xs text-white/40">Operando com liquidação no Supabase</div>
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <span className="inline-flex items-center gap-1 text-xs text-white/40">
-                  <Lock className="w-3 h-3" /> Bloqueado
+                <span className="inline-flex items-center gap-1 text-xs text-emerald-400 font-medium">
+                  Ativo no Salão
                 </span>
-                <div className="w-11 h-6 rounded-full bg-white/10 border border-white/10 relative pointer-events-none" aria-disabled="true">
-                  <span className="absolute left-0.5 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-white/40" />
+                <div className="w-11 h-6 rounded-full bg-emerald-500/30 border border-emerald-500/40 relative">
+                  <span className="absolute right-0.5 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-emerald-400" />
                 </div>
               </div>
             </div>

@@ -16,6 +16,7 @@ import Home from "@/pages/Home";
 import Sinuca from "@/pages/Sinuca";
 import Truco from "@/pages/Truco";
 import Wallet from "@/pages/Wallet";
+import Xadrez from "@/pages/Xadrez";
 
 function App() {
   return (
@@ -33,6 +34,7 @@ function App() {
             <Route path="/coinflip" element={<CoinFlip />} />
             <Route path="/sinuca" element={<Sinuca />} />
             <Route path="/truco" element={<Truco />} />
+            <Route path="/xadrez" element={<Xadrez />} />
             <Route path="/wallet" element={<Wallet />} />
             <Route path="/cashier" element={<Cashier />} />
             <Route path="/admin" element={<Admin />} />

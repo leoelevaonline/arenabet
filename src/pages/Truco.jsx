@@ -7,6 +7,7 @@ import {
   SUIT_SYMBOL, SUIT_COLOR,
 } from "@/lib/truco";
 import { abandonMatch, getHouseConfig, getBalance, placeBet, settleMatch } from "@/lib/wallet";
+import LoginGate from "@/components/LoginGate";
 
 const initialState = { phase: "bet" };
 
@@ -128,7 +129,7 @@ function CardBack() {
 }
 
 export default function Truco() {
-  const { refreshBalance } = useOutletContext() || {};
+  const { user, refreshBalance } = useOutletContext() || {};
   const [state, dispatch] = useReducer(reducer, initialState);
   const [balance, setBalance] = useState(null);
   const [config, setConfig] = useState(null);
@@ -267,6 +268,8 @@ export default function Truco() {
   };
 
   if (loading) return <div className="flex justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-white/40" /></div>;
+
+  if (!user) return <LoginGate user={user} title="Entre para jogar Truco" />;
 
   // Bet screen
   if (state.phase === "bet") {

@@ -19,9 +19,9 @@ const games = [
   { key: "sinuca", name: "Sinuca", to: "/sinuca", tag: "Mesa", desc: "Pool 8-ball com física realista contra a IA da casa ou outro jogador.", icon: "🎱", accent: "from-emerald-700/25 to-emerald-950/5", ring: "ring-emerald-400/30", available: true },
   { key: "bocha", name: "Bocha", to: "/bocha", tag: "Cancha", desc: "Bocha gaúcha até 7 pontos. Bot ou adversário no mesmo aparelho ou na fila.", icon: "🟠", accent: "from-orange-600/20 to-amber-950/5", ring: "ring-orange-400/30", available: true },
   { key: "futebol", name: "Futebol de mesa", to: "/futebol", tag: "Flick", desc: "Discos, gols e série de chutes. Enfrente o bot ou um jogador.", icon: "⚽", accent: "from-slate-500/20 to-slate-900/5", ring: "ring-slate-300/30", available: true },
-  { key: "truco", name: "Truco", to: "#", tag: "Em breve", desc: "Truco Paulista contra a IA. Peça truco e force o adversário a correr.", icon: "🃏", accent: "from-stone-500/15 to-stone-800/5", ring: "ring-stone-400/20", available: false },
-  { key: "coinflip", name: "Cara ou Coroa", to: "#", tag: "Em breve", desc: "Escolha um lado da moeda e tente acertar o resultado da rodada.", icon: "🪙", accent: "from-amber-400/20 to-amber-800/5", ring: "ring-amber-400/30", available: false },
-  { key: "xadrez", name: "Xadrez", to: "#", tag: "Em breve", desc: "Duelo de mentes com apostas. O tabuleiro abre em breve.", icon: "♚", accent: "from-slate-400/15 to-slate-700/5", ring: "ring-slate-400/20", available: false },
+  { key: "truco", name: "Truco", to: "/truco", tag: "Cartas", desc: "Truco Paulista contra a IA. Peça truco e force o adversário a correr.", icon: "🃏", accent: "from-amber-600/20 to-orange-950/5", ring: "ring-amber-500/30", available: true },
+  { key: "coinflip", name: "Cara ou Coroa", to: "/coinflip", tag: "Rápido", desc: "Escolha um lado da moeda e tente acertar o resultado da rodada.", icon: "🪙", accent: "from-amber-400/20 to-amber-800/5", ring: "ring-amber-400/30", available: true },
+  { key: "xadrez", name: "Xadrez", to: "/xadrez", tag: "Estratégia", desc: "Duelo de mentes com apostas. O tabuleiro clássico está liberado.", icon: "♚", accent: "from-slate-400/20 to-zinc-900/5", ring: "ring-slate-300/30", available: true },
 ];
 
 export default function Home() {
@@ -75,7 +75,7 @@ export default function Home() {
             Sua habilidade vale <span className="grad-gold">dinheiro de verdade.</span>
           </h1>
           <p className="mt-4 max-w-lg text-base text-pretty text-white/70 md:text-lg">
-            Aposte em Dama, Sinuca, Bocha e Futebol de mesa contra outros jogadores ou contra o Bot ArenaBet. Depósito por PIX, saque para a sua conta e comissão da casa informada antes de cada partida.
+            Aposte em Dama, Sinuca, Bocha, Futebol de mesa, Truco, Cara ou Coroa e Xadrez contra outros jogadores ou contra o Bot ArenaBet. Depósito por PIX, saque para a sua conta e comissão da casa informada antes de cada partida.
           </p>
           <div className="mt-7 flex flex-wrap items-center gap-3">
             <Link to={user ? "/dama" : "/cadastro"} className="inline-flex items-center gap-2 rounded-xl bg-[#C9A227] px-5 py-3 text-sm font-semibold text-[#14110A] shadow-lg shadow-black/40 transition hover:bg-[#E0C35A]">
