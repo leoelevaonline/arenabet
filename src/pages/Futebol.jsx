@@ -63,6 +63,16 @@ const TEAM_COLORS = {
     dark: "#123b76",
     text: "#e2f3ff",
     glow: "rgba(56, 189, 248, 0.75)",
+    jersey: "#1f7ae0",
+    jerseyDark: "#0d4a9a",
+    jerseyLight: "#7ec8ff",
+    shorts: "#f4f7fb",
+    socks: "#ffffff",
+    collar: "#f8fbff",
+    stripe: "#ffffff",
+    skin: "#e8b892",
+    hair: "#2a1c12",
+    number: "#0c2d6e",
   },
   red: {
     base: "#e94a55",
@@ -70,6 +80,16 @@ const TEAM_COLORS = {
     dark: "#741e36",
     text: "#ffe5e4",
     glow: "rgba(251, 113, 133, 0.68)",
+    jersey: "#d42132",
+    jerseyDark: "#8a1422",
+    jerseyLight: "#ff7a84",
+    shorts: "#141414",
+    socks: "#1a1a1a",
+    collar: "#f5f5f5",
+    stripe: "#f7f7f7",
+    skin: "#d4a07a",
+    hair: "#1a120c",
+    number: "#3a0810",
   },
 };
 
@@ -706,13 +726,15 @@ function drawShadow(ctx, body) {
 }
 
 function drawDisk(ctx, body, selected, active) {
-  const colors = TEAM_COLORS[body.team];
+  const kit = TEAM_COLORS[body.team];
+  const number = String(body.id.split("-")[1] || "1");
+  const r = body.r;
   drawShadow(ctx, body);
   ctx.save();
   if (active) {
     ctx.beginPath();
-    ctx.arc(body.x, body.y, body.r + 8, 0, Math.PI * 2);
-    ctx.strokeStyle = colors.glow;
+    ctx.arc(body.x, body.y, r + 8, 0, Math.PI * 2);
+    ctx.strokeStyle = kit.glow;
     ctx.lineWidth = 2.5;
     ctx.setLineDash([4, 5]);
     ctx.stroke();
@@ -720,7 +742,7 @@ function drawDisk(ctx, body, selected, active) {
   }
   if (selected) {
     ctx.beginPath();
-    ctx.arc(body.x, body.y, body.r + 12, 0, Math.PI * 2);
+    ctx.arc(body.x, body.y, r + 12, 0, Math.PI * 2);
     ctx.strokeStyle = "rgba(253, 224, 71, 0.98)";
     ctx.lineWidth = 2.4;
     ctx.setLineDash([7, 5]);
@@ -728,56 +750,115 @@ function drawDisk(ctx, body, selected, active) {
     ctx.setLineDash([]);
   }
 
-  const gradient = ctx.createRadialGradient(body.x - 9, body.y - 11, 2, body.x, body.y, body.r * 1.18);
-  gradient.addColorStop(0, colors.light);
-  gradient.addColorStop(0.34, colors.base);
-  gradient.addColorStop(1, colors.dark);
+  ctx.translate(body.x, body.y);
+
+  const rim = ctx.createRadialGradient(-r * 0.28, -r * 0.32, 2, 0, 0, r);
+  rim.addColorStop(0, kit.jerseyLight);
+  rim.addColorStop(0.46, kit.jersey);
+  rim.addColorStop(1, kit.jerseyDark);
   ctx.beginPath();
-  ctx.arc(body.x, body.y, body.r, 0, Math.PI * 2);
-  ctx.fillStyle = gradient;
+  ctx.arc(0, 0, r, 0, Math.PI * 2);
+  ctx.fillStyle = rim;
   ctx.fill();
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.42)";
-  ctx.lineWidth = 1.5;
-  ctx.stroke();
+
+  ctx.save();
   ctx.beginPath();
-  ctx.arc(body.x, body.y, body.r - 6, 0, Math.PI * 2);
-  ctx.strokeStyle = "rgba(3, 11, 18, 0.34)";
-  ctx.lineWidth = 2;
-  ctx.stroke();
+  ctx.arc(0, 0, r - 1.15, 0, Math.PI * 2);
+  ctx.clip();
+
+  ctx.fillStyle = kit.jersey;
+  ctx.fillRect(-r, -r * 0.12, r * 2, r * 1.4);
+
+  ctx.fillStyle = kit.stripe;
+  ctx.fillRect(-r * 0.18, -r * 0.16, r * 0.36, r * 1.35);
+
+  ctx.fillStyle = kit.jerseyDark;
   ctx.beginPath();
-  ctx.arc(body.x, body.y, body.r - 9, 0, Math.PI * 2);
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.2)";
-  ctx.lineWidth = 1;
-  ctx.stroke();
-  ctx.fillStyle = colors.text;
-  ctx.font = "800 13px Inter, ui-sans-serif, system-ui, sans-serif";
+  ctx.ellipse(-r * 0.78, r * 0.1, r * 0.3, r * 0.4, 0.18, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(r * 0.78, r * 0.1, r * 0.3, r * 0.4, -0.18, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = kit.collar;
+  ctx.fillRect(-r * 0.92, r * 0.28, r * 0.28, r * 0.1);
+  ctx.fillRect(r * 0.64, r * 0.28, r * 0.28, r * 0.1);
+
+  ctx.fillStyle = kit.shorts;
+  ctx.fillRect(-r * 0.46, r * 0.46, r * 0.92, r * 0.48);
+  ctx.fillStyle = "rgba(255,255,255,0.12)";
+  ctx.fillRect(-0.7, r * 0.46, 1.4, r * 0.48);
+
+  ctx.fillStyle = kit.socks;
+  ctx.fillRect(-r * 0.4, r * 0.86, r * 0.28, r * 0.22);
+  ctx.fillRect(r * 0.12, r * 0.86, r * 0.28, r * 0.22);
+
+  ctx.fillStyle = kit.collar;
+  ctx.beginPath();
+  ctx.moveTo(-r * 0.24, -r * 0.16);
+  ctx.lineTo(0, r * 0.14);
+  ctx.lineTo(r * 0.24, -r * 0.16);
+  ctx.lineTo(r * 0.13, -r * 0.16);
+  ctx.lineTo(0, r * 0.04);
+  ctx.lineTo(-r * 0.13, -r * 0.16);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = kit.hair;
+  ctx.beginPath();
+  ctx.ellipse(0, -r * 0.5, r * 0.4, r * 0.36, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = kit.skin;
+  ctx.beginPath();
+  ctx.ellipse(0, -r * 0.4, r * 0.33, r * 0.3, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = kit.number;
+  ctx.font = `800 ${Math.round(r * 0.7)}px Inter, ui-sans-serif, system-ui, sans-serif`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText(body.id.slice(-1), body.x, body.y + 0.5);
+  ctx.lineJoin = "round";
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = "rgba(255,255,255,0.88)";
+  ctx.strokeText(number, 0, r * 0.16);
+  ctx.fillText(number, 0, r * 0.16);
+  ctx.restore();
 
-  const shine = ctx.createRadialGradient(body.x - 9, body.y - 11, 0, body.x - 9, body.y - 11, 13);
-  shine.addColorStop(0, "rgba(255, 255, 255, 0.6)");
-  shine.addColorStop(1, "rgba(255, 255, 255, 0)");
   ctx.beginPath();
-  ctx.arc(body.x - 9, body.y - 11, 13, 0, Math.PI * 2);
+  ctx.arc(0, 0, r, 0, Math.PI * 2);
+  ctx.strokeStyle = "rgba(255,255,255,0.5)";
+  ctx.lineWidth = 1.7;
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(0, 0, r - 1.15, 0, Math.PI * 2);
+  ctx.strokeStyle = "rgba(0,0,0,0.38)";
+  ctx.lineWidth = 1.05;
+  ctx.stroke();
+
+  const shine = ctx.createRadialGradient(-r * 0.38, -r * 0.42, 0, -r * 0.38, -r * 0.42, r * 0.55);
+  shine.addColorStop(0, "rgba(255,255,255,0.38)");
+  shine.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.beginPath();
+  ctx.arc(-r * 0.32, -r * 0.38, r * 0.5, 0, Math.PI * 2);
   ctx.fillStyle = shine;
   ctx.fill();
   ctx.restore();
 }
 
 function drawGhostDisk(ctx, body, point) {
-  const colors = TEAM_COLORS[body.team];
+  const kit = TEAM_COLORS[body.team];
   ctx.save();
-  ctx.globalAlpha = 0.45;
+  ctx.globalAlpha = 0.5;
   ctx.beginPath();
   ctx.arc(point.x, point.y, body.r, 0, Math.PI * 2);
-  ctx.fillStyle = colors.base;
+  ctx.fillStyle = kit.jersey;
   ctx.fill();
   ctx.strokeStyle = "rgba(255, 255, 255, 0.9)";
   ctx.lineWidth = 2;
   ctx.setLineDash([5, 5]);
   ctx.stroke();
   ctx.setLineDash([]);
+  ctx.fillStyle = kit.stripe;
+  ctx.fillRect(point.x - body.r * 0.16, point.y - body.r * 0.4, body.r * 0.32, body.r * 0.9);
   ctx.restore();
 }
 
@@ -948,6 +1029,24 @@ function ForceMeter({ powerPct, turn, compact = false }) {
   );
 }
 
+function JerseyBadge({ team }) {
+  const kit = TEAM_COLORS[team];
+  return (
+    <svg viewBox="0 0 32 32" className="h-7 w-7 shrink-0" aria-hidden="true">
+      <path
+        d="M7 9 L12.5 6.5 L13 11 H19 L19.5 6.5 L25 9 L27.5 14.5 L23.5 16.5 V28 H8.5 V16.5 L4.5 14.5 Z"
+        fill={kit.jersey}
+        stroke={kit.jerseyDark}
+        strokeWidth="1.2"
+        strokeLinejoin="round"
+      />
+      <path d="M14.4 11 H17.6 V24 H14.4 Z" fill={kit.stripe} />
+      <path d="M12.2 11 L16 16.2 L19.8 11 H17.4 L16 13.4 L14.6 11 Z" fill={kit.collar} />
+      <rect x="10.2" y="24.2" width="11.6" height="3.8" fill={kit.shorts} />
+    </svg>
+  );
+}
+
 function ScorePanel({ playerScore, aiScore, playerShots, aiShots, turn, compact = false }) {
   const playerUsed = SHOTS_PER_SIDE - playerShots;
   const aiUsed = SHOTS_PER_SIDE - aiShots;
@@ -959,12 +1058,18 @@ function ScorePanel({ playerScore, aiScore, playerShots, aiShots, turn, compact 
       </div>
       <div className="grid grid-cols-2 gap-2.5">
         <div className="rounded-xl border border-sky-400/25 bg-sky-500/10 p-3">
-          <div className="text-xs font-semibold text-sky-200/75">Azul · você</div>
+          <div className="flex items-center gap-2 text-xs font-semibold text-sky-200/75">
+            <JerseyBadge team="blue" />
+            Azul · você
+          </div>
           <div className="mt-0.5 text-3xl font-black tabular-nums text-sky-100">{playerScore}</div>
           <div className="mt-1 text-[10px] text-white/40">{playerUsed}/{SHOTS_PER_SIDE} chutes</div>
         </div>
         <div className="rounded-xl border border-rose-400/25 bg-rose-500/10 p-3">
-          <div className="text-xs font-semibold text-rose-200/75">Vermelho · IA</div>
+          <div className="flex items-center gap-2 text-xs font-semibold text-rose-200/75">
+            <JerseyBadge team="red" />
+            Vermelho · IA
+          </div>
           <div className="mt-0.5 text-3xl font-black tabular-nums text-rose-100">{aiScore}</div>
           <div className="mt-1 text-[10px] text-white/40">{aiUsed}/{SHOTS_PER_SIDE} chutes</div>
         </div>

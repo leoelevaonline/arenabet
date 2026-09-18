@@ -26,20 +26,27 @@ const TABLE_H = 620;
 const BED = { left: 84, top: 76, right: 1036, bottom: 544 };
 const BED_CENTER_Y = (BED.top + BED.bottom) / 2;
 const BALL_RADIUS = 13;
-const POCKET_MOUTH_RADIUS = 48;
-const POCKET_SINK_RADIUS = 19;
-const MAX_SHOT_SPEED = 1420;
+const RACK_SPACING = BALL_RADIUS * 2 + 0.95;
+const POCKET_MOUTH_RADIUS = 31;
+const POCKET_SINK_RADIUS = 15;
+const MAX_SHOT_SPEED = 1180;
+const MAX_BALL_SPEED = 1680;
 const PULL_MAX = 245;
 const PHYSICS_STEP = 1 / 120;
-const PHYSICS_SUBSTEPS = 2;
-const COLLISION_ITERATIONS = 3;
-const MAX_CATCH_UP_STEPS = 36;
-const BALL_RESTITUTION = 0.93;
-const WALL_RESTITUTION = 0.76;
-const FRICTION_PER_SECOND = 0.09;
+const PHYSICS_SUBSTEPS = 4;
+const COLLISION_ITERATIONS = 6;
+const MAX_CATCH_UP_STEPS = 48;
+const BALL_RESTITUTION = 0.96;
+const WALL_RESTITUTION = 0.62;
+const WALL_TANGENT_DAMP = 0.88;
+const BALL_TANGENT_FRICTION = 0.14;
+const COLLISION_SLOP = 0.08;
+const COLLISION_PERCENT = 0.82;
+const FRICTION_PER_SECOND = 0.5;
 const FRICTION_RATE = -Math.log(FRICTION_PER_SECOND);
-const STOP_SPEED = 6.5;
-const SLEEP_STEPS = 10;
+const LINEAR_DRAG = 26;
+const STOP_SPEED = 3.8;
+const SLEEP_STEPS = 14;
 const TOUCH_RADIUS = BALL_RADIUS + 24;
 const AI_DIFFICULTY = {
   label: "normal",
@@ -220,8 +227,8 @@ function createWorld() {
       const number = RACK_ORDER[rackIndex];
       balls.push(buildRackBall(
         number,
-        rackApexX + row * BALL_RADIUS * Math.sqrt(3),
-        BED_CENTER_Y + (column - row / 2) * BALL_RADIUS * 2,
+        rackApexX + row * RACK_SPACING * (Math.sqrt(3) / 2),
+        BED_CENTER_Y + (column - row / 2) * RACK_SPACING,
         rackIndex + 1,
       ));
       rackIndex += 1;
@@ -272,9 +279,10 @@ function findPocketEntry(ball) {
   let bestDistance = Infinity;
   for (const pocket of POCKETS) {
     const gap = distance(ball, pocket);
-    if (gap >= POCKET_MOUTH_RADIUS || gap >= bestDistance) continue;
+    const mouth = speed > 520 ? POCKET_MOUTH_RADIUS : POCKET_MOUTH_RADIUS * 0.86;
+    if (gap >= mouth || gap >= bestDistance) continue;
     const towardPocket = unit(pocket.x - ball.x, pocket.y - ball.y);
-    if (!ball.inPocket && (speed < 1 || dot(unit(ball.vx, ball.vy), towardPocket) < -0.08)) continue;
+    if (!ball.inPocket && (speed < 10 || dot(unit(ball.vx, ball.vy), towardPocket) < 0.18)) continue;
     best = pocket;
     bestDistance = gap;
   }
@@ -307,33 +315,47 @@ function registerRailTouch(world, ball, side) {
   if (world.shot?.firstContactId) world.shot.railTouches.add(`${ball.id}:${side}`);
 }
 
+function bounceCushion(ball, axis, sign) {
+  if (axis === "x") {
+    if (ball.vx * sign > 0) {
+      ball.vx = -ball.vx * WALL_RESTITUTION;
+      ball.vy *= WALL_TANGENT_DAMP;
+    }
+  } else if (ball.vy * sign > 0) {
+    ball.vy = -ball.vy * WALL_RESTITUTION;
+    ball.vx *= WALL_TANGENT_DAMP;
+  }
+}
+
 function resolveWalls(world, ball) {
   if (ball.pocketed || ball.inPocket) return;
-  if (ball.x - ball.r < BED.left && !isNearPocketOpening(ball)) {
+  if (findPocketEntry(ball)) return;
+
+  if (ball.x - ball.r < BED.left) {
     ball.x = BED.left + ball.r;
     if (ball.vx < 0) {
-      ball.vx = -ball.vx * WALL_RESTITUTION;
+      bounceCushion(ball, "x", -1);
       registerRailTouch(world, ball, "left");
     }
   }
-  if (ball.x + ball.r > BED.right && !isNearPocketOpening(ball)) {
+  if (ball.x + ball.r > BED.right) {
     ball.x = BED.right - ball.r;
     if (ball.vx > 0) {
-      ball.vx = -ball.vx * WALL_RESTITUTION;
+      bounceCushion(ball, "x", 1);
       registerRailTouch(world, ball, "right");
     }
   }
-  if (ball.y - ball.r < BED.top && !isNearPocketOpening(ball)) {
+  if (ball.y - ball.r < BED.top) {
     ball.y = BED.top + ball.r;
     if (ball.vy < 0) {
-      ball.vy = -ball.vy * WALL_RESTITUTION;
+      bounceCushion(ball, "y", -1);
       registerRailTouch(world, ball, "top");
     }
   }
-  if (ball.y + ball.r > BED.bottom && !isNearPocketOpening(ball)) {
+  if (ball.y + ball.r > BED.bottom) {
     ball.y = BED.bottom - ball.r;
     if (ball.vy > 0) {
-      ball.vy = -ball.vy * WALL_RESTITUTION;
+      bounceCushion(ball, "y", 1);
       registerRailTouch(world, ball, "bottom");
     }
   }
@@ -355,12 +377,15 @@ function resolveBallCollision(world, first, second) {
 
   const normal = rawDistance > 0.000001 ? { x: dx / rawDistance, y: dy / rawDistance } : deterministicNormal(first, second);
   const overlap = minimumDistance - rawDistance;
-  first.x -= normal.x * overlap * 0.51;
-  first.y -= normal.y * overlap * 0.51;
-  second.x += normal.x * overlap * 0.51;
-  second.y += normal.y * overlap * 0.51;
+  const correction = Math.max(overlap - COLLISION_SLOP, 0) * COLLISION_PERCENT * 0.5;
+  first.x -= normal.x * correction;
+  first.y -= normal.y * correction;
+  second.x += normal.x * correction;
+  second.y += normal.y * correction;
 
-  const relativeVelocity = (second.vx - first.vx) * normal.x + (second.vy - first.vy) * normal.y;
+  const relativeX = second.vx - first.vx;
+  const relativeY = second.vy - first.vy;
+  const relativeVelocity = relativeX * normal.x + relativeY * normal.y;
   registerFirstContact(world, first, second, relativeVelocity);
   if (relativeVelocity >= 0) return;
 
@@ -369,6 +394,16 @@ function resolveBallCollision(world, first, second) {
   first.vy -= impulse * normal.y;
   second.vx += impulse * normal.x;
   second.vy += impulse * normal.y;
+
+  const tangent = { x: -normal.y, y: normal.x };
+  const tangentSpeed = relativeX * tangent.x + relativeY * tangent.y;
+  const maxFriction = Math.abs(impulse) * BALL_TANGENT_FRICTION;
+  const frictionImpulse = clamp(-tangentSpeed / 2, -maxFriction, maxFriction);
+  first.vx -= frictionImpulse * tangent.x;
+  first.vy -= frictionImpulse * tangent.y;
+  second.vx += frictionImpulse * tangent.x;
+  second.vy += frictionImpulse * tangent.y;
+
   first.sleepSteps = 0;
   second.sleepSteps = 0;
 }
@@ -389,12 +424,37 @@ function advancePocket(world, ball, subStep) {
   if (distance(ball, pocket) < POCKET_SINK_RADIUS) markPocketed(world, ball, pocket);
 }
 
+function clampBallSpeed(ball) {
+  const speed = Math.hypot(ball.vx, ball.vy);
+  if (speed > MAX_BALL_SPEED) {
+    const scale = MAX_BALL_SPEED / speed;
+    ball.vx *= scale;
+    ball.vy *= scale;
+  }
+}
+
+function applyClothDrag(ball, viscous, subStep) {
+  ball.vx *= viscous;
+  ball.vy *= viscous;
+  const speed = Math.hypot(ball.vx, ball.vy);
+  if (speed <= 0.0001) {
+    ball.vx = 0;
+    ball.vy = 0;
+    return;
+  }
+  const nextSpeed = Math.max(0, speed - LINEAR_DRAG * subStep);
+  const scale = nextSpeed / speed;
+  ball.vx *= scale;
+  ball.vy *= scale;
+}
+
 function stepWorld(world) {
   const subStep = PHYSICS_STEP / PHYSICS_SUBSTEPS;
-  const friction = Math.pow(FRICTION_PER_SECOND, subStep);
+  const viscous = Math.pow(FRICTION_PER_SECOND, subStep);
   for (let subStepIndex = 0; subStepIndex < PHYSICS_SUBSTEPS; subStepIndex += 1) {
     for (const ball of world.balls) {
       if (ball.pocketed) continue;
+      clampBallSpeed(ball);
       ball.x += ball.vx * subStep;
       ball.y += ball.vy * subStep;
       ball.rotation += (Math.hypot(ball.vx, ball.vy) * subStep) / Math.max(ball.r, 1);
@@ -412,17 +472,21 @@ function stepWorld(world) {
 
     for (const ball of world.balls) {
       if (ball.pocketed || ball.inPocket) continue;
-      ball.vx *= friction;
-      ball.vy *= friction;
-      if (Math.hypot(ball.vx, ball.vy) < STOP_SPEED) {
-        ball.sleepSteps += 1;
-        if (ball.sleepSteps >= SLEEP_STEPS) {
-          ball.vx = 0;
-          ball.vy = 0;
-        }
-      } else {
-        ball.sleepSteps = 0;
+      applyClothDrag(ball, viscous, subStep);
+      clampBallSpeed(ball);
+    }
+  }
+
+  for (const ball of world.balls) {
+    if (ball.pocketed || ball.inPocket) continue;
+    if (Math.hypot(ball.vx, ball.vy) < STOP_SPEED) {
+      ball.sleepSteps += 1;
+      if (ball.sleepSteps >= SLEEP_STEPS) {
+        ball.vx = 0;
+        ball.vy = 0;
       }
+    } else {
+      ball.sleepSteps = 0;
     }
   }
 }
@@ -494,8 +558,8 @@ function getLegalTargets(world, shooter) {
 }
 
 function estimateShotPower(totalDistance) {
-  const requiredSpeed = totalDistance * FRICTION_RATE * 0.52 + 130;
-  return clamp(requiredSpeed / MAX_SHOT_SPEED, 0.16, 0.96);
+  const requiredSpeed = totalDistance * (FRICTION_RATE * 0.62 + LINEAR_DRAG / Math.max(MAX_SHOT_SPEED, 1)) + 90;
+  return clamp(requiredSpeed / MAX_SHOT_SPEED, 0.18, 0.94);
 }
 
 function chooseAiShot(world) {
