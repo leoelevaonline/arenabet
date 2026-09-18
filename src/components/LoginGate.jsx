@@ -9,9 +9,9 @@ export default function LoginGate({ user, children, title = "Entre para jogar" }
         <ShieldCheck className="h-6 w-6" />
       </div>
       <h1 className="mt-4 font-display text-2xl font-bold">{title}</h1>
-      <p className="mt-2 text-sm text-white/55">Cadastro obrigatório para maiores de 18 anos. Carteira e mesas só aparecem com a conta aberta.</p>
+      <p className="mt-2 text-sm text-white/55">As mesas são com dinheiro real. Para proteger você e os outros jogadores, exigimos conta verificada e idade mínima de 18 anos.</p>
       <div className="mt-6 flex flex-col gap-2">
-        <Link to="/cadastro" className="inline-flex h-12 items-center justify-center rounded-xl bg-[#C9A227] font-semibold text-[#14110A]">Criar conta 18+</Link>
+        <Link to="/cadastro" className="inline-flex h-12 items-center justify-center rounded-xl bg-[#C9A227] font-semibold text-[#14110A]">Criar conta verificada</Link>
         <Link to="/entrar" className="inline-flex h-12 items-center justify-center rounded-xl border border-white/15 text-sm font-medium hover:bg-white/5">Já tenho conta</Link>
       </div>
     </div>

@@ -1859,7 +1859,7 @@ export default function Bocha() {
             className="mt-6 inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#C9A227] font-semibold text-[#14110A] transition hover:bg-[#E0C35A] disabled:cursor-not-allowed disabled:opacity-40"
           >
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Target className="h-4 w-4" />}
-            {busy ? "Preparando a cancha..." : opponentMode === "online" ? `Procurar adversário · ${formatMoney(bet)} créditos` : `Armar partida · ${formatMoney(bet)} créditos`}
+            {busy ? "Preparando a cancha..." : opponentMode === "online" ? `Procurar adversário · R$ ${formatMoney(bet)}` : `Armar partida · R$ ${formatMoney(bet)}`}
           </button>
         </div>
         {searching && user && (
@@ -2054,10 +2054,10 @@ export default function Bocha() {
             <h2 className="font-display text-2xl font-bold">{result.outcome === "win" ? "Você venceu!" : result.outcome === "draw" ? "Empate na cancha" : "A IA levou a melhor"}</h2>
             <p className="mt-1 text-sm text-white/55">
               {result.outcome === "win"
-                ? `Retorno: +${formatMoney(result.payout - result.bet)} créditos`
+                ? `Retorno: +R$ ${formatMoney(result.payout - result.bet)}`
                 : result.outcome === "draw"
                   ? "Aposta devolvida integralmente"
-                  : `Você perdeu ${formatMoney(result.bet)} créditos`}
+                  : `Você perdeu R$ ${formatMoney(result.bet)}`}
             </p>
             <div className="mt-5 grid grid-cols-2 gap-3">
               <div className="rounded-xl border border-red-400/20 bg-red-500/10 p-3 text-left"><div className="text-xs text-red-200/70">Você</div><div className="mt-1 text-2xl font-bold text-red-100">{result.score.player}</div></div>

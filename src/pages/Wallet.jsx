@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 
 import { AlertTriangle, Coins, ArrowDownLeft, ArrowDownRight, ArrowUpRight, History, Loader2, Trophy, TrendingUp } from "lucide-react";
 import { abandonMatch, getBalance } from "@/lib/wallet";
+import { formatBRL } from "@/lib/money";
 
 export default function Wallet() {
   const [balance, setBalance] = useState(null);
@@ -62,7 +63,7 @@ export default function Wallet() {
           </div>
           <div>
             <div className="text-xs text-white/50 uppercase tracking-wider">Saldo disponível</div>
-            <div className="text-3xl font-bold">{balance?.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}</div>
+            <div className="text-3xl font-bold tabular-nums">{formatBRL(balance)}</div>
           </div>
         </div>
         <div className="md:ml-auto flex flex-wrap gap-3">
@@ -84,7 +85,7 @@ export default function Wallet() {
         ].map((stat) => (
           <div key={stat.label} className="rounded-2xl glass p-4">
             <div className="flex items-center gap-2 text-xs text-white/45"><stat.icon className="h-3.5 w-3.5" /> {stat.label}</div>
-            <div className={`mt-2 text-xl font-semibold tabular-nums ${stat.tone}`}>{typeof stat.value === "number" ? stat.value.toLocaleString("pt-BR", { maximumFractionDigits: 2 }) : stat.value}</div>
+            <div className={`mt-2 text-xl font-semibold tabular-nums ${stat.tone}`}>{typeof stat.value === "number" ? formatBRL(stat.value) : stat.value}</div>
           </div>
         ))}
       </div>
@@ -100,7 +101,7 @@ export default function Wallet() {
                 {activeMatches.map((match) => (
                   <div key={match.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200/10 bg-black/15 px-3 py-2.5">
                     <div className="text-sm text-white/80">
-                      {gameLabel(match.game)} · aposta {Number(match.bet_amount || 0).toLocaleString("pt-BR", { maximumFractionDigits: 2 })}
+                      {gameLabel(match.game)} · aposta {formatBRL(match.bet_amount || 0)}
                     </div>
                     <button
                       type="button"
@@ -136,7 +137,7 @@ export default function Wallet() {
                     <div className="text-xs text-white/40">{new Date(t.created_date).toLocaleString("pt-BR")}</div>
                   </div>
                   <div className={`text-sm font-semibold ${positive ? "text-emerald-300" : "text-rose-300"}`}>
-                    {positive ? "+" : ""}{(t.amount || 0).toLocaleString("pt-BR", { maximumFractionDigits: 2 })}
+                    {positive ? "+" : ""}{formatBRL(t.amount || 0)}
                   </div>
                 </div>
               );
@@ -164,7 +165,7 @@ export default function Wallet() {
                    }`}>
                     {m.status === "won" ? "Vitória" : m.status === "lost" ? "Derrota" : m.status === "draw" ? "Empate" : m.status === "abandoned" ? "Abandonada" : "Em jogo"}
                   </div>
-                  <div className="text-xs text-white/50 mt-1">Aposta {m.bet_amount}</div>
+                  <div className="text-xs text-white/50 mt-1">Aposta {formatBRL(m.bet_amount)}</div>
                 </div>
               </div>
             ))}

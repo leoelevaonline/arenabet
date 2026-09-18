@@ -419,8 +419,8 @@ export default function Truco() {
             <h2 className="font-display text-2xl font-bold">{uiResult.winner === "player" ? "Você venceu!" : "Você perdeu"}</h2>
             <p className="text-white/55 text-sm mt-1">
               {uiResult.winner === "player"
-                ? `${uiResult.by === "fold" ? "A IA correu! " : ""}Prêmio: +${(uiResult.payout - uiResult.bet).toLocaleString("pt-BR", { maximumFractionDigits: 2 })} créditos`
-                : `${uiResult.by === "fold" ? "Você correu. " : ""}Você perdeu ${uiResult.bet} créditos`}
+                ? `${uiResult.by === "fold" ? "A IA correu! " : ""}Prêmio: +R$ ${(uiResult.payout - uiResult.bet).toLocaleString("pt-BR", { maximumFractionDigits: 2 })}`
+                : `${uiResult.by === "fold" ? "Você correu. " : ""}Você perdeu R$ ${uiResult.bet}`}
             </p>
             <button onClick={reset} className="mt-6 w-full h-12 rounded-xl bg-gradient-to-r from-emerald-400 to-emerald-600 text-black font-semibold inline-flex items-center justify-center gap-2 hover:from-emerald-300 hover:to-emerald-500">
               <RotateCcw className="w-4 h-4" /> Nova mão

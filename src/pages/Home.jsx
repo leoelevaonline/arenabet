@@ -1,11 +1,18 @@
 import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { Link, useOutletContext } from "react-router-dom";
 import { Image } from "@/components/ui/image";
-import { Coins, Lock, TrendingUp, ChevronRight, Zap, Trophy, ArrowRight, Bot, Users } from "lucide-react";
+import { Coins, Lock, TrendingUp, ChevronRight, Zap, Trophy, ArrowRight, Bot, Users, QrCode, ShieldCheck, Scale, HeartHandshake } from "lucide-react";
 import { getBalance, getHouseConfig } from "@/lib/wallet";
 import { getOnlinePlayers } from "@/lib/players";
+import { formatBRL } from "@/lib/money";
 import heroImage from "@/assets/arena-hero.svg";
-import logo from "@/assets/arenabet-logo.png";
+
+const trustPoints = [
+  { icon: QrCode, title: "Depósito e saque via PIX", desc: "Entrada creditada na hora e saque direto para a sua chave PIX, em seu nome." },
+  { icon: ShieldCheck, title: "Conta verificada", desc: "CPF, data de nascimento e e-mail validados. Só maiores de 18 anos jogam." },
+  { icon: Scale, title: "Regras e comissão públicas", desc: "A comissão da casa é fixa e exibida antes de cada partida. Sem taxas escondidas." },
+  { icon: HeartHandshake, title: "Jogo responsável", desc: "Limites de aposta por partida e histórico completo de todas as movimentações." },
+];
 
 const games = [
   { key: "dama", name: "Dama", to: "/dama", tag: "Habilidade", desc: "Escolha bot ArenaBet ou adversário online. Capture as peças e leve o pote.", icon: "♟️", accent: "from-amber-500/20 to-yellow-900/5", ring: "ring-[#C9A227]/40", available: true },
@@ -57,23 +64,22 @@ export default function Home() {
         </div>
         <div className="relative max-w-2xl p-6 sm:p-8 md:p-12">
           <div className="mb-5 flex flex-wrap items-center gap-2">
-            <img src={logo} alt="" className="h-12 w-12 rounded-lg object-cover ring-1 ring-[#C9A227]/40" />
             <span className="inline-flex items-center gap-2 rounded-full border border-[#C9A227]/30 bg-black/30 px-3 py-1 text-xs text-[#E8D48B] backdrop-blur">
-              18+ · casa de jogos
+              <ShieldCheck className="h-3.5 w-3.5" /> Plataforma 18+ · dinheiro real
             </span>
             <span className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs text-white/70 backdrop-blur">
-              {onlineCount} no salão agora
+              <span className="h-2 w-2 rounded-full bg-emerald-400" /> {onlineCount} jogadores online
             </span>
           </div>
-          <h1 className="font-display text-4xl font-bold leading-[1.05] tracking-tight md:text-6xl">
-            A casa abre as mesas.<br className="hidden sm:block" /> <span className="grad-gold">Você escolhe o adversário.</span>
+          <h1 className="font-display text-4xl font-bold leading-[1.05] tracking-tight text-balance md:text-6xl">
+            Sua habilidade vale <span className="grad-gold">dinheiro de verdade.</span>
           </h1>
-          <p className="mt-4 max-w-lg text-base text-white/70 md:text-lg">
-            Créditos virtuais, comissão da casa e partidas de habilidade. Jogue contra o Bot ArenaBet ou busque um adversário online.
+          <p className="mt-4 max-w-lg text-base text-pretty text-white/70 md:text-lg">
+            Aposte em Dama, Sinuca, Bocha e Futebol de mesa contra outros jogadores ou contra o Bot ArenaBet. Depósito por PIX, saque para a sua conta e comissão da casa informada antes de cada partida.
           </p>
           <div className="mt-7 flex flex-wrap items-center gap-3">
             <Link to={user ? "/dama" : "/cadastro"} className="inline-flex items-center gap-2 rounded-xl bg-[#C9A227] px-5 py-3 text-sm font-semibold text-[#14110A] shadow-lg shadow-black/40 transition hover:bg-[#E0C35A]">
-              <Zap className="h-4 w-4" /> {user ? "Ir para as mesas" : "Criar conta 18+"}
+              <Zap className="h-4 w-4" /> {user ? "Ir para as mesas" : "Abrir minha conta"}
             </Link>
             <a href="#jogos" className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white/10 px-5 py-3 text-sm font-medium backdrop-blur transition hover:bg-white/15">
               Ver modalidades <ArrowRight className="h-4 w-4" />
@@ -83,7 +89,7 @@ export default function Home() {
                 <Coins className="h-5 w-5 text-[#E8D48B]" />
                 <div>
                   <div className="text-[11px] leading-none text-white/50">Saldo</div>
-                  <div className="mt-0.5 text-sm font-semibold tabular-nums">{balance != null ? `${balance.toLocaleString("pt-BR", { maximumFractionDigits: 2 })} créditos` : "…"}</div>
+                  <div className="mt-0.5 text-sm font-semibold tabular-nums">{balance != null ? formatBRL(balance) : "…"}</div>
                 </div>
               </div>
             )}
@@ -91,12 +97,37 @@ export default function Home() {
         </div>
       </section>
 
+      <section aria-labelledby="confianca" className="rounded-3xl border border-white/10 bg-white/[0.03] p-6 md:p-8">
+        <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 id="confianca" className="font-display text-2xl font-semibold">Feita para você jogar com segurança</h2>
+            <p className="mt-1 text-sm text-white/50">Transparência em cada etapa: do cadastro ao saque.</p>
+          </div>
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-400/25 bg-emerald-500/10 px-3 py-1 text-xs text-emerald-200">
+            <ShieldCheck className="h-3.5 w-3.5" /> Dados protegidos
+          </span>
+        </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {trustPoints.map((point) => (
+            <div key={point.title} className="flex gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#C9A227]/30 bg-[#C9A227]/10 text-[#E8D48B]">
+                <point.icon className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold">{point.title}</h3>
+                <p className="mt-1 text-sm leading-relaxed text-white/50">{point.desc}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
       {config && (
         <section className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           {[
-            { label: "Comissão (rake)", value: `${config.rake_percent}%`, icon: TrendingUp, tone: "text-[#E8D48B]" },
-            { label: "Aposta mínima", value: config.min_bet, icon: Coins, tone: "text-white" },
-            { label: "Aposta máxima", value: config.max_bet, icon: Coins, tone: "text-white" },
+            { label: "Comissão da casa por partida", value: `${config.rake_percent}%`, icon: TrendingUp, tone: "text-[#E8D48B]" },
+            { label: "Aposta mínima", value: formatBRL(config.min_bet), icon: Coins, tone: "text-white" },
+            { label: "Aposta máxima", value: formatBRL(config.max_bet), icon: Coins, tone: "text-white" },
           ].map((s) => (
             <div key={s.label} className="rounded-2xl glass p-4">
               <div className="flex items-center gap-2 text-xs text-white/50">
@@ -111,8 +142,8 @@ export default function Home() {
       <section id="jogos" className="scroll-mt-24">
         <div className="mb-5 flex items-end justify-between">
           <div>
-            <h2 className="font-display text-2xl font-semibold">Quadro de mesas</h2>
-            <p className="mt-1 text-sm text-white/50">Bot da casa ou adversário online em cada modalidade.</p>
+            <h2 className="font-display text-2xl font-semibold">Modalidades disponíveis</h2>
+            <p className="mt-1 text-sm text-white/50">Escolha a mesa, defina o valor da aposta e jogue contra o bot ou um adversário online.</p>
           </div>
           <span className="hidden items-center gap-1.5 text-xs text-white/40 sm:flex">
             <Bot className="h-3.5 w-3.5" /> Bot ArenaBet · fila online
@@ -158,7 +189,7 @@ export default function Home() {
         <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
           <div>
             <h2 className="font-display text-2xl font-semibold">Salão ao vivo</h2>
-            <p className="mt-1 text-sm text-white/50">Contas logadas e movimento da casa. Desafie alguém na fila online.</p>
+            <p className="mt-1 text-sm text-white/50">Quem está nas mesas agora. Entre na fila e desafie um adversário real.</p>
           </div>
           <span className="inline-flex items-center gap-1.5 rounded-full border border-[#C9A227]/30 bg-[#C9A227]/10 px-3 py-1 text-xs text-[#E8D48B]">
             <Users className="h-3.5 w-3.5" /> {onlineCount} online
@@ -216,22 +247,22 @@ export default function Home() {
       <section className="relative flex flex-col overflow-hidden rounded-3xl glass card-glow p-8 md:flex-row md:items-center md:p-10 gap-6">
         <div className="relative flex-1">
           <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-[#C9A227]/30 bg-[#C9A227]/10 px-3 py-1 text-xs text-[#E8D48B]">
-            <Trophy className="h-3.5 w-3.5" /> {user ? "Carteira liberada" : "Cadastro 18+ para jogar"}
+            <Trophy className="h-3.5 w-3.5" /> {user ? "Sua carteira" : "Cadastro em poucos minutos"}
           </div>
-          <h2 className="font-display text-2xl font-bold leading-tight md:text-3xl">
-            {user ? <>Gerencie créditos e histórico na <span className="grad-text">carteira</span>.</> : <>Abra sua conta para entrar nas mesas e na <span className="grad-text">carteira</span>.</>}
+          <h2 className="font-display text-2xl font-bold leading-tight text-balance md:text-3xl">
+            {user ? <>Deposite, jogue e saque pela <span className="grad-text">carteira</span>.</> : <>Abra sua conta e comece com um <span className="grad-text">depósito via PIX</span>.</>}
           </h2>
-          <p className="mt-3 max-w-lg text-white/60">
+          <p className="mt-3 max-w-lg text-pretty text-white/60">
             {user
-              ? "Deposite créditos virtuais, acompanhe partidas e saques simulados. Carteira e caixa só existem para contas logadas."
-              : "Nome, e-mail, CPF, telefone e data de nascimento. Menores de 18 anos não passam no cadastro."}
+              ? "Acompanhe cada depósito, aposta, prêmio e saque em um extrato completo. Seu saldo fica disponível para sacar a qualquer momento."
+              : "Precisamos de nome, e-mail, CPF, telefone e data de nascimento para validar sua identidade. O cadastro é recusado para menores de 18 anos."}
           </p>
         </div>
         <div className="relative flex flex-col gap-3 sm:flex-row">
           {user ? (
             <>
               <Link to="/cashier?mode=deposit" className="inline-flex items-center gap-2 rounded-xl bg-[#C9A227] px-5 py-3 text-sm font-semibold text-[#14110A] hover:bg-[#E0C35A]">
-                <Coins className="h-4 w-4" /> Ir ao caixa
+                <Coins className="h-4 w-4" /> Depositar via PIX
               </Link>
               <Link to="/wallet" className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white/10 px-5 py-3 text-sm font-medium hover:bg-white/15">
                 Ver carteira
