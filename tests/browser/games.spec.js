@@ -1,5 +1,43 @@
 import { test, expect } from '@playwright/test';
 
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => {
+    const now = new Date().toISOString();
+    localStorage.setItem('arenabet.local.database.v1', JSON.stringify({
+      users: [{
+        id: 'demo-user',
+        full_name: 'Visitante',
+        email: 'demo@arenabet.local',
+        cpf: '52998224725',
+        phone: '11999999999',
+        birth_date: '1990-01-01',
+        password_hash: 'x',
+        role: 'user',
+        balance: 1000,
+        created_date: now,
+        updated_date: now,
+      }],
+      entities: {
+        HouseConfig: [{
+          id: 'house-config',
+          label: 'Principal',
+          rake_percent: 10,
+          house_edge_percent: 15,
+          min_bet: 10,
+          max_bet: 1000,
+          house_balance: 0,
+          created_date: now,
+          updated_date: now,
+        }],
+        Match: [],
+        Transaction: [],
+        User: [],
+      },
+    }));
+    sessionStorage.setItem('arenabet.session.v1', JSON.stringify({ userId: 'demo-user' }));
+  });
+});
+
 const games = {
   sinuca: { start: 'Iniciar partida', width: 1120, height: 620, x: 274, y: 310 },
   futebol: { start: 'Entrar na mesa', width: 1000, height: 620, x: 214, y: 310 },

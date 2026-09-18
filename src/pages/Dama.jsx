@@ -3,6 +3,10 @@ import { Link, useOutletContext } from "react-router-dom";
 import { Crown, RotateCcw, Loader2, Coins, ArrowLeft, Flag, Trophy, Skull } from "lucide-react";
 import confetti from "canvas-confetti";
 import * as Checkers from "@/lib/checkers";
+import LoginGate from "@/components/LoginGate";
+import MatchmakingPanel from "@/components/MatchmakingPanel";
+import OpponentSelect from "@/components/OpponentSelect";
+import { BOT_OPPONENT, canControlTurn, isHumanOpponent, sideLabel } from "@/lib/opponent";
 import { abandonMatch, getHouseConfig, getBalance, placeBet, settleMatch } from "@/lib/wallet";
 
 function Piece({ p }) {
@@ -39,10 +43,13 @@ function moveLabel(move) {
 }
 
 export default function Dama() {
-  const { refreshBalance } = useOutletContext() || {};
+  const { refreshBalance, user, authReady } = useOutletContext() || {};
   const [balance, setBalance] = useState(null);
   const [config, setConfig] = useState(null);
   const [bet, setBet] = useState(50);
+  const [opponentMode, setOpponentMode] = useState("bot");
+  const [opponent, setOpponent] = useState(BOT_OPPONENT);
+  const [searching, setSearching] = useState(false);
   const [match, setMatch] = useState(null);
   const [board, setBoard] = useState(null);
   const [turn, setTurn] = useState("player");
@@ -68,15 +75,16 @@ export default function Dama() {
   useEffect(() => { load(); }, [load]);
 
   const legalMap = useMemo(() => {
-    if (!board || turn !== "player" || result) return { byFrom: {}, hasCapture: false };
-    const { legal, hasCapture } = Checkers.allMovesFor(board, Checkers.WHITE);
+    if (!board || result || !canControlTurn(turn, opponent)) return { byFrom: {}, hasCapture: false };
+    const color = turn === "player" ? Checkers.WHITE : Checkers.BLACK;
+    const { legal, hasCapture } = Checkers.allMovesFor(board, color);
     const byFrom = {};
     for (const m of legal) {
       const key = `${m.from[0]}-${m.from[1]}`;
       (byFrom[key] = byFrom[key] || []).push(m);
     }
     return { byFrom, hasCapture };
-  }, [board, turn, result]);
+  }, [board, turn, result, opponent]);
 
   const finish = useCallback(async (winner) => {
     if (!match || settlingRef.current || settledRef.current) return;
@@ -122,7 +130,7 @@ export default function Dama() {
 
   // Turno da IA
   useEffect(() => {
-    if (!board || result || turn !== "ai" || !match) return;
+    if (!board || result || turn !== "ai" || !match || isHumanOpponent(opponent)) return;
     setAiThinking(true);
     const t = setTimeout(() => {
       const move = Checkers.bestMove(board, Checkers.BLACK, 4);
@@ -136,16 +144,21 @@ export default function Dama() {
       setTurn("player");
     }, 480);
     return () => clearTimeout(t);
-  }, [turn, board, result, match, finish]);
+  }, [turn, board, result, match, finish, opponent]);
 
-  const startMatch = async () => {
+  const startMatch = async (nextOpponent = opponent) => {
     setError("");
     const min = config?.min_bet ?? 10;
     const max = config?.max_bet ?? 1000;
     if (bet < min) return setError(`Aposta mínima: ${min}`);
     if (bet > max) return setError(`Aposta máxima: ${max}`);
     if (balance < bet) return setError("Saldo insuficiente");
+    if (opponentMode === "online" && !isHumanOpponent(nextOpponent)) {
+      setSearching(true);
+      return;
+    }
     try {
+      setOpponent(nextOpponent);
       const m = await placeBet(bet, "dama");
       if (!mountedRef.current) {
         void abandonMatch(m, "A partida foi interrompida antes de abrir.").catch(() => {});
@@ -167,7 +180,8 @@ export default function Dama() {
   };
 
   const onCellClick = (r, c) => {
-    if (turn !== "player" || result || aiThinking || !board) return;
+    if (!canControlTurn(turn, opponent) || result || aiThinking || !board) return;
+    const myColor = turn === "player" ? Checkers.WHITE : Checkers.BLACK;
     const piece = board[r][c];
     if (selected) {
       const moves = legalMap.byFrom[`${selected[0]}-${selected[1]}`] || [];
@@ -180,19 +194,20 @@ export default function Dama() {
         setBoard(nb);
         setLastMove(target);
         setSelected(null);
-        const winner = Checkers.checkWinner(nb, Checkers.BLACK);
-        if (winner === Checkers.WHITE) { finish("player"); return; }
-        setTurn("ai");
+        const nextTurn = turn === "player" ? "ai" : "player";
+        const winner = Checkers.checkWinner(nb, nextTurn === "player" ? Checkers.WHITE : Checkers.BLACK);
+        if (winner === myColor) { finish(turn === "player" ? "player" : "ai"); return; }
+        setTurn(nextTurn);
         return;
       }
-      if (Checkers.owner(piece) === Checkers.WHITE && legalMap.byFrom[`${r}-${c}`]) {
+      if (Checkers.owner(piece) === myColor && legalMap.byFrom[`${r}-${c}`]) {
         setSelected([r, c]);
       } else {
         setSelected(null);
       }
       return;
     }
-    if (Checkers.owner(piece) === Checkers.WHITE && legalMap.byFrom[`${r}-${c}`]) {
+    if (Checkers.owner(piece) === myColor && legalMap.byFrom[`${r}-${c}`]) {
       setSelected([r, c]);
     }
   };
@@ -215,12 +230,15 @@ export default function Dama() {
     setLastMove(null);
     setTurn("player");
     setError("");
+    setSearching(false);
+    setOpponent(opponentMode === "bot" ? BOT_OPPONENT : BOT_OPPONENT);
     load();
   };
 
-  if (loading) {
+  if (!authReady || loading) {
     return <div className="flex justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-white/40" /></div>;
   }
+  if (!user) return <LoginGate user={user} title="Entre para jogar Dama" />;
 
   const counts = board ? Checkers.countPieces(board) : { w: 12, b: 12 };
 
@@ -237,7 +255,17 @@ export default function Dama() {
             <span className="relative">♟️</span>
           </div>
           <h1 className="font-display text-2xl font-bold">Dama</h1>
-          <p className="text-white/55 text-sm mt-1">Enfrente a IA. Capture todas as peças ou bloqueie os movimentos do adversário para vencer.</p>
+          <p className="text-white/55 text-sm mt-1">Capture todas as peças ou bloqueie o adversário. Escolha o Bot ArenaBet ou um jogador.</p>
+
+          <div className="mt-6">
+            <OpponentSelect
+              value={opponentMode}
+              onChange={(mode) => {
+                setOpponentMode(mode);
+                setOpponent(BOT_OPPONENT);
+              }}
+            />
+          </div>
 
           <div className="mt-6 rounded-xl bg-white/5 border border-white/10 p-4 text-sm space-y-2">
             <div className="flex justify-between"><span className="text-white/50">Seu saldo</span><span className="font-medium">{balance?.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}</span></div>
@@ -267,13 +295,25 @@ export default function Dama() {
           {error && <div className="mt-4 p-3 rounded-lg bg-rose-500/10 text-rose-300 text-sm">{error}</div>}
 
           <button
-            onClick={startMatch}
+            onClick={() => startMatch(opponentMode === "bot" ? BOT_OPPONENT : opponent)}
             disabled={balance < bet}
-            className="mt-6 w-full h-12 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 text-black font-semibold hover:from-emerald-400 hover:to-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed transition"
+            className="mt-6 w-full h-12 rounded-xl bg-[#C9A227] text-[#14110A] font-semibold hover:bg-[#E0C35A] disabled:opacity-40 disabled:cursor-not-allowed transition"
           >
-            Iniciar partida · {bet} créditos
+            {opponentMode === "online" ? `Procurar adversário · ${bet} créditos` : `Iniciar partida · ${bet} créditos`}
           </button>
         </div>
+        {searching && user && (
+          <MatchmakingPanel
+            game="dama"
+            bet={bet}
+            user={user}
+            onMatched={(matched) => {
+              setSearching(false);
+              startMatch(matched);
+            }}
+            onCancel={() => setSearching(false)}
+          />
+        )}
       </div>
     );
   }
@@ -288,7 +328,7 @@ export default function Dama() {
           </Link>
           <div className="flex items-center gap-2 text-sm">
             <span role="status" aria-live="polite" className={`px-3 py-1.5 rounded-full border ${turn === "player" ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/30" : "bg-white/5 text-white/40 border-white/10"}`}>
-              {aiThinking ? "IA pensando…" : turn === "player" ? "Sua vez" : "Vez da IA"}
+              {aiThinking ? "Bot pensando…" : `${sideLabel(turn, opponent)} · ${turn === "player" ? "brancas" : "pretas"}`}
             </span>
           </div>
         </div>

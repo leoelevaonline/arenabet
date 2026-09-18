@@ -20,6 +20,7 @@ const userBalance = (user) => {
 
 export async function getBalance() {
   const me = await db.auth.me();
+  if (!me) return null;
   if (me.balance == null) {
     await db.auth.updateMe({ balance: STARTING_BALANCE });
     return STARTING_BALANCE;

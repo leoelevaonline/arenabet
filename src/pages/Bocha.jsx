@@ -15,6 +15,10 @@ import {
   Trophy,
 } from "lucide-react";
 import confetti from "canvas-confetti";
+import LoginGate from "@/components/LoginGate";
+import MatchmakingPanel from "@/components/MatchmakingPanel";
+import OpponentSelect from "@/components/OpponentSelect";
+import { BOT_OPPONENT, canControlTurn, isHumanOpponent, sideLabel } from "@/lib/opponent";
 import { abandonMatch, getHouseConfig, getBalance, placeBet, settleMatch } from "@/lib/wallet";
 import { drawSurface } from "@/lib/gameSurfaces";
 import { tablePoint, tableTransform } from "@/lib/canvasTable";
@@ -921,10 +925,13 @@ function MiniMap({ snapshot }) {
 }
 
 export default function Bocha() {
-  const { refreshBalance } = useOutletContext() || {};
+  const { refreshBalance, user, authReady } = useOutletContext() || {};
   const [balance, setBalance] = useState(null);
   const [config, setConfig] = useState(null);
   const [bet, setBet] = useState(50);
+  const [opponentMode, setOpponentMode] = useState("bot");
+  const [opponent, setOpponent] = useState(BOT_OPPONENT);
+  const [searching, setSearching] = useState(false);
   const [match, setMatch] = useState(null);
   const [phase, setPhase] = useState("bet");
   const [handNumber, setHandNumber] = useState(1);
@@ -961,6 +968,8 @@ export default function Bocha() {
   const handNumberRef = useRef(1);
   const headSideRef = useRef("left");
   const turnRef = useRef("player");
+  const opponentRef = useRef(BOT_OPPONENT);
+  opponentRef.current = opponent;
   const playerLeftRef = useRef(4);
   const aiLeftRef = useRef(4);
   const playerScoreRef = useRef(0);
@@ -1478,7 +1487,7 @@ export default function Bocha() {
   }
 
   useEffect(() => {
-    if (!match || result || phase !== "jack" || turn !== "ai") return undefined;
+    if (!match || result || phase !== "jack" || turn !== "ai" || isHumanOpponent(opponent)) return undefined;
     if (aiTimerRef.current) window.clearTimeout(aiTimerRef.current);
     setAiThinking(true);
     setMessage("IA posiciona o bolim em uma zona válida...");
@@ -1494,10 +1503,10 @@ export default function Bocha() {
         aiTimerRef.current = null;
       }
     };
-  }, [match, result, phase, turn, handNumber]);
+  }, [match, result, phase, turn, handNumber, opponent]);
 
   useEffect(() => {
-    if (!match || result || phase !== "balls" || turn !== "ai" || moving) return undefined;
+    if (!match || result || phase !== "balls" || turn !== "ai" || moving || isHumanOpponent(opponent)) return undefined;
     if (aiTimerRef.current) window.clearTimeout(aiTimerRef.current);
     setAiThinking(true);
     setMessage("IA mede as distâncias e simula aproximação e bochaço...");
@@ -1515,7 +1524,7 @@ export default function Bocha() {
         aiTimerRef.current = null;
       }
     };
-  }, [match, result, phase, turn, moving, handNumber, playerLeft, aiLeft]);
+  }, [match, result, phase, turn, moving, handNumber, playerLeft, aiLeft, opponent]);
 
   useEffect(() => () => {
     const activeMatch = matchRef.current;
@@ -1578,7 +1587,7 @@ export default function Bocha() {
 
   const onPointerDown = (event) => {
     if (aimRef.current || jackAimRef.current || (event.pointerType === "mouse" && event.button !== 0)) return;
-    if (!match || result || moving || resolvingRef.current || turnRef.current !== "player") return;
+    if (!match || result || moving || resolvingRef.current || !canControlTurn(turnRef.current, opponentRef.current)) return;
     const point = toCanvasPoint(event, false);
     const world = worldRef.current;
     if (!world) return;
@@ -1631,7 +1640,7 @@ export default function Bocha() {
       const current = jackAimRef.current;
       jackAimRef.current = null;
       releasePointer(event);
-      if (!resultRef.current && phaseRef.current === "jack" && current.target) placeJackAt(current.target, "player");
+      if (!resultRef.current && phaseRef.current === "jack" && current.target) placeJackAt(current.target, turnRef.current);
       drawRef.current?.();
       return;
     }
@@ -1640,11 +1649,11 @@ export default function Bocha() {
     aimRef.current = null;
     releasePointer(event);
     setPowerPct(0);
-    if (current.power < 0.08 || resultRef.current || movingRef.current || phaseRef.current !== "balls" || turnRef.current !== "player") {
+    if (current.power < 0.08 || resultRef.current || movingRef.current || phaseRef.current !== "balls" || !canControlTurn(turnRef.current, opponentRef.current)) {
       drawRef.current?.();
       return;
     }
-    fireShot("player", current.anchor.y, current.dir, current.power, "manual");
+    fireShot(turnRef.current, current.anchor.y, current.dir, current.power, "manual");
   };
 
   const onPointerCancel = (event) => {
@@ -1661,7 +1670,7 @@ export default function Bocha() {
     drawRef.current?.();
   };
 
-  const startMatch = async () => {
+  const startMatch = async (nextOpponent = opponent) => {
     setError("");
     const wager = Number(bet);
     const min = config?.min_bet ?? 10;
@@ -1669,8 +1678,14 @@ export default function Bocha() {
     if (!Number.isFinite(wager) || wager < min) return setError(`Aposta mínima: ${min}`);
     if (wager > max) return setError(`Aposta máxima: ${max}`);
     if (Number(balance ?? 0) < wager) return setError("Saldo insuficiente");
+    if (opponentMode === "online" && !isHumanOpponent(nextOpponent)) {
+      setSearching(true);
+      return;
+    }
     setBusy(true);
     try {
+      setOpponent(nextOpponent);
+      opponentRef.current = nextOpponent;
       const newMatch = await placeBet(wager, "bocha");
       if (!mountedRef.current) {
         void abandonMatch(newMatch, "A partida foi interrompida antes de abrir.").catch(() => {});
@@ -1773,9 +1788,10 @@ export default function Bocha() {
     })();
   };
 
-  if (loading) {
+  if (!authReady || loading) {
     return <div className="flex justify-center py-20"><Loader2 className="h-6 w-6 animate-spin text-white/40" /></div>;
   }
+  if (!user) return <LoginGate user={user} title="Entre para jogar Bocha" />;
 
   if (!match) {
     const rake = (config?.rake_percent || 0) / 100;
@@ -1792,7 +1808,17 @@ export default function Bocha() {
           </div>
           <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-orange-200/60">Jogo de cancha</div>
           <h1 className="mt-1 font-display text-2xl font-bold">Bocha gaúcha</h1>
-          <p className="mt-1 text-sm text-white/55">Partida em mãos até 7 pontos, com quatro bolas por equipe. Posicione o bolim, controle a força e faça a distância falar na cancha de terra batida.</p>
+          <p className="mt-1 text-sm text-white/55">Partida em mãos até 7 pontos. Bot ArenaBet ou adversário online.</p>
+
+          <div className="mt-6">
+            <OpponentSelect
+              value={opponentMode}
+              onChange={(mode) => {
+                setOpponentMode(mode);
+                setOpponent(BOT_OPPONENT);
+              }}
+            />
+          </div>
 
           <div className="mt-6 space-y-2 rounded-xl border border-orange-200/10 bg-white/5 p-4 text-sm">
             <div className="flex justify-between"><span className="text-white/50">Seu saldo</span><span className="font-medium">{formatMoney(balance)}</span></div>
@@ -1828,14 +1854,26 @@ export default function Bocha() {
           </div>
           {error && <div className="mt-4 rounded-lg bg-rose-500/10 p-3 text-sm text-rose-300">{error}</div>}
           <button
-            onClick={startMatch}
+            onClick={() => startMatch(opponentMode === "bot" ? BOT_OPPONENT : opponent)}
             disabled={busy || Number(balance ?? 0) < Number(bet || 0)}
-            className="mt-6 inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-orange-300 to-red-500 font-semibold text-black transition hover:from-orange-200 hover:to-red-400 disabled:cursor-not-allowed disabled:opacity-40"
+            className="mt-6 inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#C9A227] font-semibold text-[#14110A] transition hover:bg-[#E0C35A] disabled:cursor-not-allowed disabled:opacity-40"
           >
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Target className="h-4 w-4" />}
-            {busy ? "Preparando a cancha..." : `Armar partida · ${formatMoney(bet)} créditos`}
+            {busy ? "Preparando a cancha..." : opponentMode === "online" ? `Procurar adversário · ${formatMoney(bet)} créditos` : `Armar partida · ${formatMoney(bet)} créditos`}
           </button>
         </div>
+        {searching && user && (
+          <MatchmakingPanel
+            game="bocha"
+            bet={bet}
+            user={user}
+            onMatched={(matched) => {
+              setSearching(false);
+              startMatch(matched);
+            }}
+            onCancel={() => setSearching(false)}
+          />
+        )}
       </div>
     );
   }
@@ -1968,7 +2006,7 @@ export default function Bocha() {
           </div>
           <div className="mt-3 flex items-center justify-between rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs">
             <span className="text-white/45">Quem joga</span>
-            <span className="font-medium text-amber-100">{phase === "jack" ? (turn === "player" ? "Você marca o bolim" : "IA marca o bolim") : turn === "player" ? "Você" : turn === "ai" ? "IA" : "Mão resolvida"}</span>
+            <span className="font-medium text-amber-100">{phase === "jack" ? `${sideLabel(turn, opponent)} marca o bolim` : turn === "player" || turn === "ai" ? sideLabel(turn, opponent) : "Mão resolvida"}</span>
           </div>
           <div className={`mt-3 flex items-center gap-2 rounded-xl border px-3 py-2 text-sm ${aiThinking ? "border-blue-300/25 bg-blue-400/10 text-blue-100" : "border-white/10 bg-black/10 text-white/60"}`}>
             {aiThinking ? <BrainCircuit className="h-4 w-4 animate-pulse" /> : <Target className="h-4 w-4" />}

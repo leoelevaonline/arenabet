@@ -133,7 +133,7 @@
     border: 1px solid rgba(255, 255, 255, 0.12);
   }
   .grad-text {
-    background: linear-gradient(90deg, #6ee7b7, #fcd34d);
+    background: linear-gradient(90deg, #F5E7B8, #C9A227);
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
@@ -146,11 +146,11 @@
   }
   .arena-bg {
     background:
-      radial-gradient(1100px 560px at 75% -10%, rgba(16, 185, 129, 0.14), transparent 60%),
-      radial-gradient(900px 500px at 0% 110%, rgba(251, 191, 36, 0.10), transparent 55%),
+      radial-gradient(1100px 560px at 80% -8%, rgba(201, 162, 39, 0.12), transparent 58%),
+      radial-gradient(900px 500px at 0% 110%, rgba(31, 138, 91, 0.10), transparent 55%),
       linear-gradient(120deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px),
       linear-gradient(30deg, rgba(255, 255, 255, 0.014) 1px, transparent 1px),
-      #070b0a;
+      #0B1220;
     background-size: auto, auto, 72px 72px, 72px 72px, auto;
   }
   .noise-overlay {
