@@ -3,9 +3,10 @@ import { Link, useOutletContext } from "react-router-dom";
 import { Loader2, ArrowLeft, Sparkles, Gem, Crown, Coins } from "lucide-react";
 import confetti from "canvas-confetti";
 import { abandonMatch, getHouseConfig, getBalance, placeBet, settleMatch } from "@/lib/wallet";
+import LoginGate from "@/components/LoginGate";
 
 export default function CoinFlip() {
-  const { refreshBalance } = useOutletContext() || {};
+  const { user, refreshBalance } = useOutletContext() || {};
   const [balance, setBalance] = useState(null);
   const [config, setConfig] = useState(null);
   const [bet, setBet] = useState(50);
@@ -92,6 +93,10 @@ export default function CoinFlip() {
 
   if (loading) {
     return <div className="flex justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-white/40" /></div>;
+  }
+
+  if (!user) {
+    return <LoginGate user={user} title="Entre para jogar Cara ou Coroa" />;
   }
 
   const faceLabel = (f) => (f === "heads" ? "Cara" : "Coroa");

@@ -1,3 +1,5 @@
+import { supabase } from "@/lib/supabaseClient";
+
 const STORAGE_KEY = "arenabet.local.database.v1";
 const SESSION_KEY = "arenabet.session.v1";
 
@@ -28,7 +30,7 @@ const seedDatabase = () => ({
 
 const loadDatabase = () => {
   try {
-    const stored = localStorage.getItem(STORAGE_KEY);
+    const stored = typeof localStorage !== "undefined" ? localStorage.getItem(STORAGE_KEY) : null;
     if (stored) {
       const database = JSON.parse(stored);
       database.users ||= [];
@@ -40,48 +42,64 @@ const loadDatabase = () => {
       return database;
     }
   } catch {
-    localStorage.removeItem(STORAGE_KEY);
+    if (typeof localStorage !== "undefined") localStorage.removeItem(STORAGE_KEY);
   }
 
   const database = seedDatabase();
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(database));
+  if (typeof localStorage !== "undefined") {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(database));
+  }
   return database;
 };
 
 const saveDatabase = (database) => {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(database));
+  if (typeof localStorage !== "undefined") {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(database));
+    } catch {
+      // quota or private browsing error
+    }
+  }
 };
 
-const publicUser = ({ password_hash: _passwordHash, ...user }) => user;
+const publicUser = (user) => {
+  if (!user) return null;
+  const { password_hash: _hash, ...safe } = user;
+  return {
+    ...safe,
+    balance: Number(safe.balance ?? 1000),
+  };
+};
 
 const readSession = () => {
   try {
-    const raw = sessionStorage.getItem(SESSION_KEY);
-    return raw ? JSON.parse(raw) : null;
+    if (typeof sessionStorage !== "undefined") {
+      const raw = sessionStorage.getItem(SESSION_KEY);
+      if (raw) return JSON.parse(raw);
+    }
+    if (typeof localStorage !== "undefined") {
+      const raw = localStorage.getItem(SESSION_KEY);
+      if (raw) return JSON.parse(raw);
+    }
+    return null;
   } catch {
-    sessionStorage.removeItem(SESSION_KEY);
     return null;
   }
 };
 
 const writeSession = (userId) => {
-  if (!userId) {
-    sessionStorage.removeItem(SESSION_KEY);
-    return;
+  try {
+    if (!userId) {
+      if (typeof sessionStorage !== "undefined") sessionStorage.removeItem(SESSION_KEY);
+      if (typeof localStorage !== "undefined") localStorage.removeItem(SESSION_KEY);
+      return;
+    }
+    const payload = JSON.stringify({ userId });
+    if (typeof sessionStorage !== "undefined") sessionStorage.setItem(SESSION_KEY, payload);
+    if (typeof localStorage !== "undefined") localStorage.setItem(SESSION_KEY, payload);
+  } catch {
+    // noop
   }
-  sessionStorage.setItem(SESSION_KEY, JSON.stringify({ userId }));
-};
-
-const getCurrentUser = (database = loadDatabase()) => {
-  const session = readSession();
-  if (!session?.userId) return null;
-  return database.users.find((item) => item.id === session.userId) || null;
-};
-
-const requireUser = (database) => {
-  const user = getCurrentUser(database);
-  if (!user) throw new Error("Faça login para continuar");
-  return user;
 };
 
 const hashPassword = async (password) => {
@@ -116,22 +134,37 @@ const isAdult = (birthDate) => {
   return birth.toISOString().slice(0, 10) <= cutoff.toISOString().slice(0, 10);
 };
 
+// Queue to serialize balance mutations safely
 let atomicQueue = Promise.resolve();
-const atomic = (work) => {
-  const run = atomicQueue.then(() => {
-    const database = loadDatabase();
-    const user = requireUser(database);
-    const result = work({ database, user, createId, now });
-    saveDatabase(database);
-    return result;
-  });
-  atomicQueue = run.catch(() => undefined);
-  return run;
-};
 
-const auth = {
+export const auth = {
   async me() {
-    const user = getCurrentUser();
+    const session = readSession();
+    if (!session?.userId) return null;
+
+    try {
+      const { data, error } = await supabase
+        .from("arenabet_users")
+        .select("*")
+        .eq("id", session.userId)
+        .maybeSingle();
+
+      if (!error && data) {
+        // keep local cache updated
+        const database = loadDatabase();
+        const idx = database.users.findIndex((u) => u.id === data.id);
+        if (idx >= 0) database.users[idx] = data;
+        else database.users.push(data);
+        saveDatabase(database);
+        return publicUser(data);
+      }
+    } catch (e) {
+      console.warn("[ArenaBet] Falha ao buscar usuário no Supabase, usando cache:", e);
+    }
+
+    // fallback to local cache
+    const database = loadDatabase();
+    const user = database.users.find((u) => u.id === session.userId);
     return user ? publicUser(user) : null;
   },
 
@@ -140,6 +173,7 @@ const auth = {
     const normalizedEmail = String(email || "").trim().toLowerCase();
     const cpfDigits = digitsOnly(cpf);
     const phoneDigits = digitsOnly(phone);
+
     if (name.length < 3) throw new Error("Informe o nome completo");
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) throw new Error("E-mail inválido");
     if (!isValidCpf(cpfDigits)) throw new Error("CPF inválido");
@@ -147,10 +181,26 @@ const auth = {
     if (!isAdult(birth_date)) throw new Error("Cadastro permitido apenas para maiores de 18 anos");
     if (String(password || "").length < 6) throw new Error("A senha deve ter pelo menos 6 caracteres");
 
-    const database = loadDatabase();
-    if (database.users.some((item) => item.email === normalizedEmail)) throw new Error("Este e-mail já está cadastrado");
-    if (database.users.some((item) => item.cpf === cpfDigits)) throw new Error("Este CPF já está cadastrado");
+    // Check duplicate in Supabase
+    try {
+      const { data: existingEmail } = await supabase
+        .from("arenabet_users")
+        .select("id")
+        .eq("email", normalizedEmail)
+        .maybeSingle();
+      if (existingEmail) throw new Error("Este e-mail já está cadastrado");
 
+      const { data: existingCpf } = await supabase
+        .from("arenabet_users")
+        .select("id")
+        .eq("cpf", cpfDigits)
+        .maybeSingle();
+      if (existingCpf) throw new Error("Este CPF já está cadastrado");
+    } catch (err) {
+      if (err.message?.includes("já está cadastrado")) throw err;
+    }
+
+    const password_hash = await hashPassword(password);
     const user = {
       id: createId(),
       full_name: name,
@@ -158,12 +208,28 @@ const auth = {
       cpf: cpfDigits,
       phone: phoneDigits,
       birth_date,
-      password_hash: await hashPassword(password),
+      password_hash,
       role: "user",
       balance: 1000,
       created_date: now(),
       updated_date: now(),
     };
+
+    // Save to Supabase
+    try {
+      const { error: insertError } = await supabase.from("arenabet_users").insert(user);
+      if (insertError) {
+        if (insertError.message?.includes("email")) throw new Error("Este e-mail já está cadastrado");
+        if (insertError.message?.includes("cpf")) throw new Error("Este CPF já está cadastrado");
+        console.error("[ArenaBet] Supabase user insert error:", insertError);
+      }
+    } catch (e) {
+      if (e.message?.includes("já está cadastrado")) throw e;
+      console.warn("[ArenaBet] Falha ao gravar usuário no Supabase:", e);
+    }
+
+    // Also update local cache
+    const database = loadDatabase();
     database.users.push(user);
     saveDatabase(database);
     writeSession(user.id);
@@ -172,10 +238,37 @@ const auth = {
 
   async login(email, password) {
     const normalizedEmail = String(email || "").trim().toLowerCase();
+    const passwordHash = await hashPassword(password);
+
+    // Try Supabase first
+    try {
+      const { data: user, error } = await supabase
+        .from("arenabet_users")
+        .select("*")
+        .eq("email", normalizedEmail)
+        .maybeSingle();
+
+      if (!error && user) {
+        if (user.password_hash !== passwordHash) {
+          throw new Error("E-mail ou senha incorretos");
+        }
+        writeSession(user.id);
+        const database = loadDatabase();
+        const idx = database.users.findIndex((u) => u.id === user.id);
+        if (idx >= 0) database.users[idx] = user;
+        else database.users.push(user);
+        saveDatabase(database);
+        return publicUser(user);
+      }
+    } catch (err) {
+      if (err.message === "E-mail ou senha incorretos") throw err;
+      console.warn("[ArenaBet] Supabase login query falhou, verificando cache:", err);
+    }
+
+    // Fallback to local cache
     const database = loadDatabase();
     const user = database.users.find((item) => item.email === normalizedEmail);
     if (!user) throw new Error("E-mail ou senha incorretos");
-    const passwordHash = await hashPassword(password);
     if (user.password_hash !== passwordHash) throw new Error("E-mail ou senha incorretos");
     writeSession(user.id);
     return publicUser(user);
@@ -186,89 +279,337 @@ const auth = {
   },
 
   async updateMe(changes) {
-    const database = loadDatabase();
-    const user = requireUser(database);
-    const index = database.users.findIndex((item) => item.id === user.id);
-    const next = { ...database.users[index], ...changes, id: user.id, updated_date: now() };
-    delete next.password_hash;
-    next.password_hash = database.users[index].password_hash;
-    database.users[index] = next;
-    saveDatabase(database);
-    return publicUser(database.users[index]);
-  },
-};
+    const session = readSession();
+    if (!session?.userId) throw new Error("Faça login para continuar");
 
-const sortRecords = (records, sort) => {
-  if (!sort) return records;
-  const descending = sort.startsWith("-");
-  const field = descending ? sort.slice(1) : sort;
-  return [...records].sort((left, right) => {
-    const result = String(left[field] ?? "").localeCompare(String(right[field] ?? ""), undefined, { numeric: true });
-    return descending ? -result : result;
-  });
-};
+    const safeChanges = { ...changes, updated_date: now() };
+    delete safeChanges.password_hash;
+    delete safeChanges.id;
 
-const entityApi = (entityName) => ({
-  async list(sort, limit) {
-    const database = loadDatabase();
-    let records = [...(database.entities[entityName] || [])];
-    const user = getCurrentUser(database);
-    if (["Match", "Transaction"].includes(entityName)) {
-      if (!user) return [];
-      if (user.role !== "admin") {
-        records = records.filter((record) => record.created_by === user.id);
+    let updatedUser = null;
+
+    try {
+      const { data, error } = await supabase
+        .from("arenabet_users")
+        .update(safeChanges)
+        .eq("id", session.userId)
+        .select()
+        .maybeSingle();
+
+      if (!error && data) {
+        updatedUser = data;
       }
+    } catch (e) {
+      console.warn("[ArenaBet] Supabase updateMe falhou:", e);
     }
-    records = sortRecords(records, sort);
-    return limit ? records.slice(0, limit) : records;
-  },
 
-  async filter(query = {}, sort, limit) {
-    let records = await this.list(sort);
-    records = records.filter((record) => Object.entries(query).every(([key, value]) => record[key] === value));
-    return limit ? records.slice(0, limit) : records;
-  },
-
-  async get(id) {
-    const record = (await this.list()).find((item) => item.id === id);
-    if (!record) throw new Error(`${entityName} não encontrado`);
-    return record;
-  },
-
-  async create(data) {
     const database = loadDatabase();
-    database.entities[entityName] ||= [];
-    const user = requireUser(database);
-    const record = {
-      ...data,
-      id: createId(),
-      created_by: user.id,
-      created_date: now(),
-      updated_date: now(),
-    };
-    database.entities[entityName].push(record);
-    saveDatabase(database);
-    return record;
-  },
+    const index = database.users.findIndex((item) => item.id === session.userId);
+    if (index >= 0) {
+      database.users[index] = { ...database.users[index], ...safeChanges, ...(updatedUser || {}) };
+      saveDatabase(database);
+      return publicUser(database.users[index]);
+    }
 
-  async update(id, changes) {
-    const database = loadDatabase();
-    const records = database.entities[entityName] || [];
-    const index = records.findIndex((item) => item.id === id);
-    if (index < 0) throw new Error(`${entityName} não encontrado`);
-    records[index] = { ...records[index], ...changes, id, updated_date: now() };
-    saveDatabase(database);
-    return records[index];
+    if (updatedUser) return publicUser(updatedUser);
+    throw new Error("Usuário não encontrado");
   },
+};
 
-  async delete(id) {
+const entityTableMap = {
+  HouseConfig: "arenabet_house_config",
+  Match: "arenabet_matches",
+  Transaction: "arenabet_transactions",
+  User: "arenabet_users",
+};
+
+const entityApi = (entityName) => {
+  const tableName = entityTableMap[entityName];
+
+  return {
+    async list(sort, limit) {
+      const session = readSession();
+      const currentUserId = session?.userId;
+
+      // Try Supabase first
+      if (tableName) {
+        try {
+          let query = supabase.from(tableName).select("*");
+
+          if (["Match", "Transaction"].includes(entityName)) {
+            if (!currentUserId) return [];
+            // Admin role check could allow all, otherwise filter by created_by
+            const me = await auth.me();
+            if (me?.role !== "admin") {
+              query = query.eq("created_by", currentUserId);
+            }
+          }
+
+          if (sort) {
+            const descending = sort.startsWith("-");
+            const field = descending ? sort.slice(1) : sort;
+            query = query.order(field, { ascending: !descending });
+          } else {
+            query = query.order("created_date", { ascending: false });
+          }
+
+          if (limit) {
+            query = query.limit(limit);
+          }
+
+          const { data, error } = await query;
+          if (!error && data) {
+            const database = loadDatabase();
+            const localRecords = (database.entities[entityName] || []).filter(
+              (r) => !data.some((d) => d.id === r.id) && (r.created_by === currentUserId || !currentUserId)
+            );
+            // Async push unsynced local records to Supabase
+            if (localRecords.length > 0) {
+              for (const loc of localRecords) {
+                const payload = {
+                  ...loc,
+                  player_id: loc.player_id || loc.created_by,
+                  user_id: loc.user_id || loc.created_by,
+                };
+                supabase.from(tableName).upsert(payload).then();
+              }
+            }
+
+            const combined = [...data, ...localRecords];
+            return combined.map((item) => ({
+              ...item,
+              amount: item.amount != null ? Number(item.amount) : undefined,
+              bet_amount: item.bet_amount != null ? Number(item.bet_amount) : undefined,
+              payout: item.payout != null ? Number(item.payout) : undefined,
+              house_cut: item.house_cut != null ? Number(item.house_cut) : undefined,
+              balance_before: item.balance_before != null ? Number(item.balance_before) : undefined,
+              balance_after: item.balance_after != null ? Number(item.balance_after) : undefined,
+              rake_percent: item.rake_percent != null ? Number(item.rake_percent) : undefined,
+              house_edge_percent: item.house_edge_percent != null ? Number(item.house_edge_percent) : undefined,
+              min_bet: item.min_bet != null ? Number(item.min_bet) : undefined,
+              max_bet: item.max_bet != null ? Number(item.max_bet) : undefined,
+              house_balance: item.house_balance != null ? Number(item.house_balance) : undefined,
+            }));
+          }
+        } catch (e) {
+          console.warn(`[ArenaBet] Supabase list ${entityName} falhou, usando cache:`, e);
+        }
+      }
+
+      // Local fallback
+      const database = loadDatabase();
+      let records = [...(database.entities[entityName] || [])];
+      if (["Match", "Transaction"].includes(entityName)) {
+        if (!currentUserId) return [];
+        const me = database.users.find((u) => u.id === currentUserId);
+        if (me?.role !== "admin") {
+          records = records.filter((record) => record.created_by === currentUserId);
+        }
+      }
+      if (sort) {
+        const descending = sort.startsWith("-");
+        const field = descending ? sort.slice(1) : sort;
+        records.sort((left, right) => {
+          const res = String(left[field] ?? "").localeCompare(String(right[field] ?? ""), undefined, { numeric: true });
+          return descending ? -res : res;
+        });
+      }
+      return limit ? records.slice(0, limit) : records;
+    },
+
+    async filter(queryObj = {}, sort, limit) {
+      let records = await this.list(sort);
+      records = records.filter((record) =>
+        Object.entries(queryObj).every(([key, value]) => record[key] === value)
+      );
+      return limit ? records.slice(0, limit) : records;
+    },
+
+    async get(id) {
+      if (tableName) {
+        try {
+          const { data, error } = await supabase.from(tableName).select("*").eq("id", id).maybeSingle();
+          if (!error && data) return data;
+        } catch {
+          // fallback
+        }
+      }
+      const records = await this.list();
+      const record = records.find((item) => item.id === id);
+      if (!record) throw new Error(`${entityName} não encontrado`);
+      return record;
+    },
+
+    async create(data) {
+      const session = readSession();
+      const currentUserId = session?.userId || "anonymous";
+
+      const record = {
+        ...data,
+        id: data.id || createId(),
+        created_by: data.created_by || currentUserId,
+        created_date: now(),
+        updated_date: now(),
+      };
+
+      if (tableName) {
+        try {
+          const { error } = await supabase.from(tableName).insert(record);
+          if (error) console.error(`[ArenaBet] Erro ao criar em ${tableName}:`, error);
+        } catch (e) {
+          console.warn(`[ArenaBet] Supabase create ${entityName} falhou:`, e);
+        }
+      }
+
+      const database = loadDatabase();
+      database.entities[entityName] ||= [];
+      database.entities[entityName].push(record);
+      saveDatabase(database);
+      return record;
+    },
+
+    async update(id, changes) {
+      const safeChanges = { ...changes, updated_date: now() };
+
+      if (tableName) {
+        try {
+          const { error } = await supabase.from(tableName).update(safeChanges).eq("id", id);
+          if (error) console.error(`[ArenaBet] Erro ao atualizar em ${tableName}:`, error);
+        } catch (e) {
+          console.warn(`[ArenaBet] Supabase update ${entityName} falhou:`, e);
+        }
+      }
+
+      const database = loadDatabase();
+      const records = database.entities[entityName] || [];
+      const index = records.findIndex((item) => item.id === id);
+      if (index >= 0) {
+        records[index] = { ...records[index], ...safeChanges, id };
+        saveDatabase(database);
+        return records[index];
+      }
+      return { id, ...safeChanges };
+    },
+
+    async delete(id) {
+      if (tableName) {
+        try {
+          await supabase.from(tableName).delete().eq("id", id);
+        } catch {
+          // fallback
+        }
+      }
+
+      const database = loadDatabase();
+      const records = database.entities[entityName] || [];
+      database.entities[entityName] = records.filter((item) => item.id !== id);
+      saveDatabase(database);
+      return { success: true };
+    },
+  };
+};
+
+export const atomic = (work) => {
+  const run = atomicQueue.then(async () => {
+    const session = readSession();
+    if (!session?.userId) throw new Error("Faça login para continuar");
+
+    // Fetch freshest user data from Supabase
+    let user = null;
+    try {
+      const { data, error } = await supabase
+        .from("arenabet_users")
+        .select("*")
+        .eq("id", session.userId)
+        .maybeSingle();
+      if (!error && data) user = data;
+    } catch {
+      // fallback
+    }
+
     const database = loadDatabase();
-    const records = database.entities[entityName] || [];
-    database.entities[entityName] = records.filter((item) => item.id !== id);
+    if (!user) {
+      user = database.users.find((u) => u.id === session.userId);
+    }
+    if (!user) throw new Error("Faça login para continuar");
+
+    const previousBalance = Number(user.balance);
+
+    // Track newly added records to sync them to Supabase
+    const initialMatchesLen = (database.entities.Match || []).length;
+    const initialTxLen = (database.entities.Transaction || []).length;
+
+    const result = work({ database, user, createId, now });
+
+    // Save to local cache
+    const uIdx = database.users.findIndex((u) => u.id === user.id);
+    if (uIdx >= 0) database.users[uIdx] = user;
     saveDatabase(database);
-    return { success: true };
-  },
-});
+
+    // Sync changes to Supabase asynchronously
+    try {
+      // 1. Sync user balance
+      if (Number(user.balance) !== previousBalance) {
+        await supabase
+          .from("arenabet_users")
+          .update({
+            balance: Number(user.balance),
+            updated_date: now(),
+          })
+          .eq("id", user.id);
+      }
+
+      // 2. Sync new or modified matches
+      const currentMatches = database.entities.Match || [];
+      for (let i = initialMatchesLen; i < currentMatches.length; i++) {
+        const m = currentMatches[i];
+        const matchData = {
+          ...m,
+          player_id: m.player_id || m.created_by || user.id,
+          created_by: m.created_by || m.player_id || user.id,
+        };
+        await supabase.from("arenabet_matches").upsert(matchData);
+      }
+      // Also check the settled match if work() updated one
+      if (result && typeof result === "object" && result.id && currentMatches.some((m) => m.id === result.id)) {
+        const found = currentMatches.find((m) => m.id === result.id);
+        if (found) {
+          const matchData = {
+            ...found,
+            player_id: found.player_id || found.created_by || user.id,
+            created_by: found.created_by || found.player_id || user.id,
+          };
+          await supabase.from("arenabet_matches").upsert(matchData);
+        }
+      }
+
+      // 3. Sync new transactions
+      const currentTxs = database.entities.Transaction || [];
+      for (let i = initialTxLen; i < currentTxs.length; i++) {
+        const t = currentTxs[i];
+        const txData = {
+          ...t,
+          user_id: t.user_id || t.created_by || user.id,
+          created_by: t.created_by || t.user_id || user.id,
+        };
+        await supabase.from("arenabet_transactions").upsert(txData);
+      }
+
+      // 4. Sync house config
+      const cfg = (database.entities.HouseConfig || [])[0];
+      if (cfg) {
+        await supabase.from("arenabet_house_config").upsert(cfg);
+      }
+    } catch (syncError) {
+      console.warn("[ArenaBet] Supabase atomic sync:", syncError);
+    }
+
+    return result;
+  });
+
+  atomicQueue = run.catch(() => undefined);
+  return run;
+};
 
 const entities = new Proxy({}, {
   get: (_target, entityName) => entityApi(String(entityName)),
@@ -280,5 +621,4 @@ export const db = {
   entities,
 };
 
-export const localDatabase = db;
 export default db;
