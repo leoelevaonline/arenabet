@@ -105,7 +105,7 @@ export default function Admin() {
     { key: "house_edge_percent", label: "Vantagem da casa (house edge) %", hint: "Margem teórica da casa em jogos de sorte.", icon: TrendingUp },
     { key: "min_bet", label: "Aposta mínima", icon: Coins },
     { key: "max_bet", label: "Aposta máxima", icon: Coins },
-    { key: "house_balance", label: "Saldo da casa (créditos)", hint: "Total acumulado pela casa.", icon: Wallet },
+    { key: "house_balance", label: "Saldo da casa (R$)", hint: "Total acumulado pela casa.", icon: Wallet },
   ];
 
   const winRate = stats.wins + stats.losses + stats.draws > 0

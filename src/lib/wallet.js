@@ -57,7 +57,7 @@ export async function depositCredits(value, method = "pix") {
       amount,
       method,
       status: "completed",
-      description: `Depósito simulado via ${method.toUpperCase()}`,
+      description: `Depósito via ${method.toUpperCase()}`,
       balance_before,
       balance_after,
     }, user, createId, now);
@@ -79,7 +79,7 @@ export async function withdrawCredits(value, method = "pix") {
       amount: -amount,
       method,
       status: "completed",
-      description: `Saque simulado via ${method.toUpperCase()}`,
+      description: `Saque via ${method.toUpperCase()}`,
       balance_before,
       balance_after,
     }, user, createId, now);

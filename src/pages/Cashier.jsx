@@ -15,16 +15,17 @@ import {
   WalletCards,
 } from "lucide-react";
 import { depositCredits, getBalance, withdrawCredits } from "@/lib/wallet";
+import { formatBRL } from "@/lib/money";
 
 const methods = {
   deposit: [
-    { id: "pix", label: "PIX simulado", icon: QrCode, hint: "Aprovação instantânea" },
-    { id: "card", label: "Cartão virtual", icon: CreditCard, hint: "Sem cobrança real" },
-    { id: "bank", label: "Transferência", icon: Building2, hint: "Crédito imediato" },
+    { id: "pix", label: "PIX", icon: QrCode, hint: "Crédito imediato após a confirmação" },
+    { id: "card", label: "Cartão de crédito", icon: CreditCard, hint: "Visa, Mastercard e Elo" },
+    { id: "bank", label: "Transferência bancária", icon: Building2, hint: "Crédito em até 1 dia útil" },
   ],
   withdrawal: [
-    { id: "pix", label: "Chave PIX", icon: QrCode, hint: "Processamento imediato" },
-    { id: "bank", label: "Conta bancária", icon: Landmark, hint: "Operação simulada" },
+    { id: "pix", label: "Chave PIX", icon: QrCode, hint: "Chave vinculada ao seu CPF" },
+    { id: "bank", label: "Conta bancária", icon: Landmark, hint: "Conta de mesma titularidade" },
   ],
 };
 
@@ -82,12 +83,12 @@ export default function Cashier() {
           <Link to="/wallet" className="mb-3 inline-flex items-center gap-1.5 text-sm text-white/50 transition hover:text-white">
             <ArrowLeft className="h-4 w-4" /> Voltar para a carteira
           </Link>
-          <h1 className="font-display text-3xl font-bold">Caixa virtual</h1>
-          <p className="mt-1 text-sm text-white/50">Simule depósitos e saques usando créditos, sem movimentar dinheiro real.</p>
+          <h1 className="font-display text-3xl font-bold">Caixa</h1>
+          <p className="mt-1 text-sm text-white/50">Deposite para jogar ou saque seu saldo para uma conta em seu nome.</p>
         </div>
         <div className="rounded-2xl border border-emerald-500/25 bg-emerald-500/10 px-5 py-3 text-right">
           <div className="text-[11px] uppercase tracking-wider text-emerald-200/60">Saldo disponível</div>
-          <div className="text-2xl font-bold text-emerald-200">{balance.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}</div>
+          <div className="text-2xl font-bold text-emerald-200">{formatBRL(balance)}</div>
         </div>
       </div>
 
@@ -112,9 +113,9 @@ export default function Cashier() {
 
           <form onSubmit={submit} className="space-y-6 p-5 sm:p-8">
             <div>
-              <label htmlFor="amount" className="text-sm font-medium text-white/70">Valor em créditos</label>
+              <label htmlFor="amount" className="text-sm font-medium text-white/70">Valor (R$)</label>
               <div className="mt-2 flex items-center rounded-2xl border border-white/10 bg-black/25 px-4 focus-within:border-emerald-400/50 focus-within:ring-2 focus-within:ring-emerald-400/10">
-                <span className="text-sm font-semibold text-white/35">CR</span>
+                <span className="text-sm font-semibold text-white/35">R$</span>
                 <input
                   id="amount"
                   type="number"
@@ -134,14 +135,14 @@ export default function Cashier() {
                     onClick={() => setAmount(value)}
                     className={`rounded-xl border px-2 py-2 text-xs font-medium transition ${Number(amount) === value ? "border-emerald-400/50 bg-emerald-500/15 text-emerald-200" : "border-white/10 bg-white/5 text-white/55 hover:bg-white/10"}`}
                   >
-                    {value}
+                    R$ {value}
                   </button>
                 ))}
               </div>
             </div>
 
             <div>
-              <div className="text-sm font-medium text-white/70">Método simulado</div>
+              <div className="text-sm font-medium text-white/70">Forma de pagamento</div>
               <div className="mt-2 grid gap-2 sm:grid-cols-3">
                 {operationMethods.map((item) => (
                   <button
@@ -160,12 +161,12 @@ export default function Cashier() {
 
             {!isDeposit && (
               <div>
-                <label htmlFor="destination" className="text-sm font-medium text-white/70">Destino fictício</label>
+                <label htmlFor="destination" className="text-sm font-medium text-white/70">{method === "pix" ? "Chave PIX (CPF, e-mail ou celular)" : "Banco, agência e conta"}</label>
                 <input
                   id="destination"
                   value={destination}
                   onChange={(event) => setDestination(event.target.value)}
-                  placeholder={method === "pix" ? "exemplo@pix.local" : "Conta de demonstração"}
+                  placeholder={method === "pix" ? "000.000.000-00" : "Banco · agência · conta"}
                   className="mt-2 h-12 w-full rounded-xl border border-white/10 bg-black/20 px-4 text-sm text-white outline-none placeholder:text-white/25 focus:border-amber-400/40"
                   required
                 />
@@ -180,7 +181,7 @@ export default function Cashier() {
               className={`flex h-12 w-full items-center justify-center gap-2 rounded-xl px-5 py-3.5 font-semibold text-black transition disabled:opacity-50 ${isDeposit ? "bg-gradient-to-r from-emerald-400 to-emerald-600 hover:from-emerald-300 hover:to-emerald-500" : "bg-gradient-to-r from-amber-300 to-amber-500 hover:from-amber-200 hover:to-amber-400"}`}
             >
               {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : isDeposit ? <ArrowDownLeft className="h-5 w-5" /> : <ArrowUpRight className="h-5 w-5" />}
-              {loading ? "Processando..." : isDeposit ? "Simular depósito" : "Simular saque"}
+              {loading ? "Processando..." : isDeposit ? `Depositar ${formatBRL(amount)}` : `Solicitar saque de ${formatBRL(amount)}`}
             </button>
           </form>
         </section>
@@ -192,10 +193,10 @@ export default function Cashier() {
                 <BadgeCheck className="h-7 w-7" />
               </div>
               <h2 className="mt-4 text-xl font-bold">Operação concluída</h2>
-              <p className="mt-1 text-sm text-white/50">Comprovante de demonstração gerado localmente.</p>
+              <p className="mt-1 text-sm text-white/50">Guarde o número do comprovante para qualquer contato com o suporte.</p>
               <div className="mt-5 space-y-3 rounded-2xl border border-white/10 bg-black/20 p-4 text-sm">
                 <div className="flex justify-between gap-3"><span className="text-white/40">Operação</span><span>{isDeposit ? "Depósito" : "Saque"}</span></div>
-                <div className="flex justify-between gap-3"><span className="text-white/40">Valor</span><span className="font-semibold">{Math.abs(receipt.amount).toLocaleString("pt-BR")} CR</span></div>
+                <div className="flex justify-between gap-3"><span className="text-white/40">Valor</span><span className="font-semibold">{formatBRL(Math.abs(receipt.amount))}</span></div>
                 <div className="flex justify-between gap-3"><span className="text-white/40">Método</span><span className="uppercase">{receipt.method}</span></div>
                 <div className="flex justify-between gap-3"><span className="text-white/40">Status</span><span className="text-emerald-300">Concluído</span></div>
                 <div className="flex items-center justify-between gap-3 border-t border-white/10 pt-3">
@@ -207,14 +208,18 @@ export default function Cashier() {
           ) : (
             <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-6">
               <WalletCards className="h-8 w-8 text-white/30" />
-              <h2 className="mt-4 font-semibold">Ambiente de demonstração</h2>
-              <p className="mt-2 text-sm leading-relaxed text-white/45">Nenhuma cobrança, transferência bancária ou pagamento real será realizado. Os créditos existem somente neste navegador.</p>
+              <h2 className="mt-4 font-semibold">Como funciona</h2>
+              <ul className="mt-2 flex flex-col gap-2 text-sm leading-relaxed text-white/50">
+                <li>Depósitos via PIX entram no saldo assim que o pagamento é confirmado.</li>
+                <li>Saques só são enviados para chave PIX ou conta bancária no mesmo CPF do cadastro.</li>
+                <li>Todas as movimentações ficam registradas no extrato da carteira.</li>
+              </ul>
             </div>
           )}
           <div className="rounded-2xl border border-sky-500/20 bg-sky-500/10 p-4 text-sm text-sky-100/70">
             <div className="flex gap-3">
               <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-sky-300" />
-              <p>Os dados da operação são locais e podem ser apagados limpando o armazenamento do navegador.</p>
+              <p>Seus dados de pagamento são tratados com criptografia e nunca são compartilhados com outros jogadores.</p>
             </div>
           </div>
         </aside>

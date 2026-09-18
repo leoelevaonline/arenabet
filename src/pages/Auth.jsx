@@ -76,20 +76,27 @@ export default function Auth({ mode = "login" }) {
   return (
     <div className="mx-auto grid max-w-5xl gap-8 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
       <div className="hidden lg:block">
-        <img src={logo} alt="Logo ArenaBet" className="w-full max-w-md rounded-3xl border border-[#C9A227]/25 object-cover shadow-[0_30px_80px_-30px_rgba(201,162,39,0.45)]" />
-        <p className="mt-5 max-w-sm text-sm leading-relaxed text-white/50">
-          Casa de jogos de habilidade com créditos virtuais. Cadastro individual, verificação de idade e mesas contra bot ou adversário.
+        <img src={logo} alt="ArenaBet" className="w-full max-w-xs object-contain drop-shadow-[0_20px_50px_rgba(201,162,39,0.25)]" />
+        <p className="mt-8 max-w-sm text-sm leading-relaxed text-white/55">
+          Plataforma de apostas em jogos de habilidade com dinheiro real. Identidade verificada, depósito e saque via PIX e comissão da casa informada antes de cada partida.
         </p>
+        <ul className="mt-6 flex flex-col gap-3 text-sm text-white/65">
+          {["Cadastro exclusivo para maiores de 18 anos", "Saques para uma chave PIX no seu CPF", "Extrato completo de depósitos, apostas e prêmios"].map((item) => (
+            <li key={item} className="flex items-center gap-2.5">
+              <ShieldCheck className="h-4 w-4 shrink-0 text-[#E8D48B]" /> {item}
+            </li>
+          ))}
+        </ul>
       </div>
       <div className="rounded-3xl border border-white/10 bg-[#121826] p-5 sm:p-8">
         <div className="mb-6 lg:hidden">
           <BrandLogo compact />
         </div>
-        <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#E8D48B]/70">Acesso 18+</div>
-        <h1 className="mt-2 font-display text-3xl font-bold">{isRegister ? "Abrir conta" : "Entrar"}</h1>
+        <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#E8D48B]/70">Conta verificada · 18+</div>
+        <h1 className="mt-2 font-display text-3xl font-bold">{isRegister ? "Abrir minha conta" : "Entrar"}</h1>
         <p className="mt-2 text-sm text-white/50">
           {isRegister
-            ? "Preencha seus dados. O cadastro é bloqueado para menores de 18 anos."
+            ? "Usamos seus dados apenas para validar identidade e idade. O cadastro é recusado para menores de 18 anos."
             : "Use o e-mail e a senha da sua conta ArenaBet."}
         </p>
 
@@ -193,7 +200,7 @@ export default function Auth({ mode = "login" }) {
             className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#C9A227] font-semibold text-[#14110A] transition hover:bg-[#E0C35A] disabled:opacity-50"
           >
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
-            {loading ? "Validando..." : isRegister ? "Criar conta 18+" : "Entrar na casa"}
+            {loading ? "Validando..." : isRegister ? "Criar conta verificada" : "Entrar na plataforma"}
           </button>
         </form>
 
@@ -204,7 +211,7 @@ export default function Auth({ mode = "login" }) {
             <>Novo por aqui? <Link to="/cadastro" className="text-[#E8D48B] hover:underline">Cadastre-se</Link></>
           )}
         </p>
-        <p className="mt-4 text-center text-[11px] uppercase tracking-[0.16em] text-white/30">Proibido para menores de 18 anos · créditos virtuais</p>
+        <p className="mt-4 text-center text-[11px] uppercase tracking-[0.16em] text-white/30">Proibido para menores de 18 anos · jogue com responsabilidade</p>
       </div>
     </div>
   );

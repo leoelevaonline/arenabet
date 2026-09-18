@@ -1860,7 +1860,7 @@ export default function Futebol() {
             </div>
             <h2 id="futebol-result-title" className="relative font-display text-2xl font-black">{result.outcome === "win" ? "Você venceu a mesa" : result.outcome === "draw" ? "Empate técnico" : "A IA levou a partida"}</h2>
             <p className="relative mt-1 text-sm leading-relaxed text-white/55">
-              {result.outcome === "win" ? `Prêmio: +${formatCredits(result.payout - result.bet)} cr��ditos` : result.outcome === "draw" ? "A aposta foi devolvida ao saldo." : `Você perdeu ${formatCredits(result.bet)} créditos.`}
+              {result.outcome === "win" ? `Prêmio: +R$ ${formatCredits(result.payout - result.bet)}` : result.outcome === "draw" ? "A aposta foi devolvida ao saldo." : `Você perdeu R$ ${formatCredits(result.bet)}.`}
             </p>
             <div className="relative mt-5 flex items-center justify-center gap-5 text-sm"><span className="font-bold text-sky-200">Azul {result.playerScore}</span><span className="text-white/25">x</span><span className="font-bold text-rose-200">Vermelho {result.aiScore}</span></div>
             <button type="button" onClick={resetGame} className="relative mt-6 inline-flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-400 to-emerald-600 font-bold text-[#04120c] transition hover:from-emerald-300 hover:to-emerald-500"><RotateCcw className="h-4 w-4" /> Jogar novamente</button>

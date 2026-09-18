@@ -299,7 +299,7 @@ export default function Dama() {
             disabled={balance < bet}
             className="mt-6 w-full h-12 rounded-xl bg-[#C9A227] text-[#14110A] font-semibold hover:bg-[#E0C35A] disabled:opacity-40 disabled:cursor-not-allowed transition"
           >
-            {opponentMode === "online" ? `Procurar adversário · ${bet} créditos` : `Iniciar partida · ${bet} créditos`}
+            {opponentMode === "online" ? `Procurar adversário · R$ ${bet}` : `Iniciar partida · R$ ${bet}`}
           </button>
         </div>
         {searching && user && (
@@ -436,10 +436,10 @@ export default function Dama() {
             </h2>
             <p className="text-white/55 text-sm mt-1">
               {result.status === "won"
-                ? `Prêmio: +${(result.payout - result.bet).toLocaleString("pt-BR", { maximumFractionDigits: 2 })} créditos (comissão ${result.houseCut})`
+                ? `Prêmio: +R$ ${(result.payout - result.bet).toLocaleString("pt-BR", { maximumFractionDigits: 2 })} (comissão R$ ${result.houseCut})`
                 : result.status === "draw"
                 ? "Aposta devolvida"
-                : `Você perdeu ${result.bet} créditos`}
+                : `Você perdeu R$ ${result.bet}`}
             </p>
             <button onClick={reset} className="mt-6 w-full h-12 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 text-black font-semibold inline-flex items-center justify-center gap-2 hover:from-emerald-400 hover:to-emerald-500">
               <RotateCcw className="w-4 h-4" /> Jogar novamente

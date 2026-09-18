@@ -64,7 +64,7 @@ export default function MatchmakingPanel({ game, bet, user, onMatched, onCancel 
           <div>
             <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#E8D48B]/70">Fila da casa</div>
             <h2 className="mt-1 font-display text-xl font-bold">Encontrar adversário</h2>
-            <p className="mt-1 text-sm text-white/50">Aposta {Number(bet).toLocaleString("pt-BR")} créditos. Outra conta neste navegador pode sentar na sua mesa.</p>
+            <p className="mt-1 text-sm text-white/50">Aposta de R$ {Number(bet).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}. O valor fica reservado até um adversário aceitar a mesa.</p>
           </div>
           <button type="button" onClick={onCancel} className="rounded-full border border-white/10 p-2 text-white/60 hover:text-white" aria-label="Cancelar busca">
             <X className="h-4 w-4" />
