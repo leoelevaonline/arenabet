@@ -3,6 +3,7 @@ import { Link, useOutletContext } from "react-router-dom";
 import { Loader2, ArrowLeft, Sparkles, Gem, Crown, Coins } from "lucide-react";
 import confetti from "canvas-confetti";
 import { abandonMatch, getHouseConfig, getBalance, placeBet, settleMatch } from "@/lib/wallet";
+import { sfx } from "@/lib/sound";
 import LoginGate from "@/components/LoginGate";
 
 export default function CoinFlip() {
@@ -52,6 +53,8 @@ export default function CoinFlip() {
     if (bet > max) return setError(`Aposta máxima: ${max}`);
     if (balance < bet) return setError("Saldo insuficiente");
     setFlipping(true);
+    sfx.bet();
+    sfx.flip();
     try {
       const m = await placeBet(bet, "coinflip");
       if (!mountedRef.current) {
@@ -86,8 +89,12 @@ export default function CoinFlip() {
   };
 
   useEffect(() => {
-    if (result?.win) {
+    if (!result) return;
+    if (result.win) {
+      sfx.win();
       confetti({ particleCount: 100, spread: 70, origin: { y: 0.55 }, colors: ["#fbbf24", "#fde68a", "#ffffff"] });
+    } else {
+      sfx.lose();
     }
   }, [result]);
 

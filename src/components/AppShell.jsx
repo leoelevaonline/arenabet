@@ -1,19 +1,28 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { Link, Navigate, Outlet, useLocation } from "react-router-dom";
-import { Coins, Landmark, LayoutGrid, LogOut, ShieldCheck, UserRound, Wallet as WalletIcon } from "lucide-react";
+import { Coins, Landmark, LayoutGrid, LogOut, ShieldCheck, UserRound, Volume2, VolumeX, Wallet as WalletIcon } from "lucide-react";
 import BrandLogo, { BrandMark } from "@/components/BrandLogo";
 import { formatBRL } from "@/lib/money";
 import { getCurrentUser, logoutAccount, subscribeAuth } from "@/lib/auth";
 import { getOnlinePlayers } from "@/lib/players";
 import { clearPresence, heartbeatPresence } from "@/lib/presence";
 import { getBalance } from "@/lib/wallet";
+import { isMuted, subscribeMuted, toggleMuted, sfx } from "@/lib/sound";
 
 export default function AppShell() {
   const [user, setUser] = useState(null);
   const [authReady, setAuthReady] = useState(false);
   const [balance, setBalance] = useState(null);
   const [onlineCount, setOnlineCount] = useState(() => getOnlinePlayers().length);
+  const [muted, setMuted] = useState(() => isMuted());
   const location = useLocation();
+
+  useEffect(() => subscribeMuted(setMuted), []);
+
+  const handleToggleMute = () => {
+    const next = toggleMuted();
+    if (!next) sfx.click();
+  };
 
   const refreshAuth = useCallback(async () => {
     try {
@@ -99,6 +108,16 @@ export default function AppShell() {
             })}
           </nav>
           <div className="ml-auto flex items-center gap-2 sm:gap-3">
+            <button
+              type="button"
+              onClick={handleToggleMute}
+              className="rounded-full border border-white/10 p-2 text-white/55 transition hover:text-white"
+              aria-label={muted ? "Ativar sons" : "Desativar sons"}
+              aria-pressed={muted}
+              title={muted ? "Sons desativados" : "Sons ativados"}
+            >
+              {muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+            </button>
             {user ? (
               <>
                 <Link to="/wallet" className="flex items-center gap-2 rounded-full border border-[#C9A227]/30 bg-[#C9A227]/10 px-3.5 py-1.5 text-sm font-semibold tabular-nums text-[#E8D48B] transition hover:bg-[#C9A227]/20">

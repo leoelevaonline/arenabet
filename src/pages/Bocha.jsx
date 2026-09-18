@@ -5,6 +5,7 @@ import {
   BrainCircuit,
   CircleDot,
   Coins,
+  Flag,
   Gauge,
   Loader2,
   Map,
@@ -20,6 +21,7 @@ import MatchmakingPanel from "@/components/MatchmakingPanel";
 import OpponentSelect from "@/components/OpponentSelect";
 import { BOT_OPPONENT, canControlTurn, isHumanOpponent, sideLabel } from "@/lib/opponent";
 import { abandonMatch, getHouseConfig, getBalance, placeBet, settleMatch } from "@/lib/wallet";
+import { sfx } from "@/lib/sound";
 import { drawSurface } from "@/lib/gameSurfaces";
 import { tablePoint, tableTransform } from "@/lib/canvasTable";
 
@@ -1321,6 +1323,7 @@ export default function Bocha() {
     ball.y = launchY;
     ball.vx = safeDirection.x * MAX_SPEED * safePower;
     ball.vy = safeDirection.y * MAX_SPEED * safePower;
+    sfx.hit(safePower);
     ball.played = true;
     ball.active = true;
     world.lastShotId = ball.id;
@@ -1458,6 +1461,9 @@ export default function Bocha() {
       payout = wager;
       status = "draw";
     }
+    if (status === "won") sfx.win();
+    else if (status === "draw") sfx.draw();
+    else sfx.lose();
 
     (async () => {
       try {
@@ -1740,6 +1746,23 @@ export default function Bocha() {
     }
   };
 
+  const endMatch = () => {
+    const activeMatch = matchRef.current;
+    if (!activeMatch || resultRef.current || resolvingRef.current || settledRef.current) {
+      reset();
+      return;
+    }
+    if (!window.confirm("Encerrar a partida agora conta como derrota e a aposta será perdida. Deseja continuar?")) return;
+    resolvingRef.current = true;
+    settledRef.current = true;
+    sfx.end();
+    void abandonMatch(activeMatch, "Você encerrou a partida.")
+      .catch(() => {})
+      .finally(() => {
+        reset();
+      });
+  };
+
   const reset = () => {
     const activeMatch = matchRef.current;
     if (activeMatch && !resultRef.current && !resolvingRef.current) {
@@ -1899,9 +1922,19 @@ export default function Bocha() {
     <div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_304px]">
       <div className="min-w-0">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <Link to="/" className="inline-flex items-center gap-1.5 text-sm text-white/50 hover:text-white">
-            <ArrowLeft className="h-4 w-4" /> Lobby
-          </Link>
+          <div className="flex items-center gap-3">
+            <Link to="/" className="inline-flex items-center gap-1.5 text-sm text-white/50 hover:text-white">
+              <ArrowLeft className="h-4 w-4" /> Lobby
+            </Link>
+            {!result && (
+              <button
+                onClick={endMatch}
+                className="inline-flex items-center gap-1.5 rounded-full border border-red-400/30 bg-red-500/10 px-3 py-1.5 text-sm font-medium text-red-200 hover:bg-red-500/20"
+              >
+                <Flag className="h-3.5 w-3.5" /> Encerrar
+              </button>
+            )}
+          </div>
           <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm ${turn === "player" && !moving && !aiThinking ? "border-orange-300/30 bg-orange-400/10 text-orange-100" : "border-white/10 bg-white/5 text-white/60"}`} role="status" aria-live="polite">
             {aiThinking ? <BrainCircuit className="h-4 w-4 animate-pulse" /> : <CircleDot className="h-4 w-4" />}
             {statusText}

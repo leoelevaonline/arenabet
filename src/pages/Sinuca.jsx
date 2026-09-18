@@ -5,6 +5,7 @@ import {
   BrainCircuit,
   CircleDot,
   Coins,
+  Flag,
   Gauge,
   Loader2,
   RotateCcw,
@@ -18,6 +19,7 @@ import MatchmakingPanel from "@/components/MatchmakingPanel";
 import OpponentSelect from "@/components/OpponentSelect";
 import { BOT_OPPONENT, canControlTurn, isHumanOpponent, sideLabel } from "@/lib/opponent";
 import { abandonMatch, getHouseConfig, getBalance, placeBet, settleMatch } from "@/lib/wallet";
+import { sfx } from "@/lib/sound";
 import { drawSurface } from "@/lib/gameSurfaces";
 import { tablePoint, tableTransform } from "@/lib/canvasTable";
 
@@ -1220,8 +1222,14 @@ export default function Sinuca() {
   }, []);
 
   useEffect(() => {
-    if (result?.outcome === "win") {
+    if (!result) return;
+    if (result.outcome === "win") {
       confetti({ particleCount: 130, spread: 78, origin: { y: 0.6 }, colors: ["#34d399", "#fbbf24", "#ffffff"] });
+      sfx.win();
+    } else if (result.outcome === "draw") {
+      sfx.draw();
+    } else {
+      sfx.lose();
     }
   }, [result]);
 
@@ -1320,6 +1328,11 @@ export default function Sinuca() {
     }
     if (steps >= MAX_CATCH_UP_STEPS && accumulatorRef.current >= PHYSICS_STEP) accumulatorRef.current = PHYSICS_STEP * 0.5;
     draw();
+    const pocketedNow = worldRef.current.balls.filter((ball) => ball.pocketed).length;
+    if (pocketedNow > (worldRef.current.pocketedHeard || 0)) {
+      worldRef.current.pocketedHeard = pocketedNow;
+      sfx.pocket();
+    }
     if (isWorldMoving(worldRef.current)) {
       physicsTimerRef.current = setTimeout(runPhysics, 8);
       return;
@@ -1338,6 +1351,7 @@ export default function Sinuca() {
     if (turnRef.current !== shooter || ballInHandRef.current) return;
     const dir = unit(direction.x, direction.y);
     const shotPower = clamp(power, 0.08, 1);
+    sfx.hit(shotPower);
     world.shot = {
       shooter,
       wasBreak: world.breakOpen,
@@ -1625,6 +1639,34 @@ export default function Sinuca() {
     }
   }
 
+  function endMatch() {
+    const activeMatch = matchRef.current;
+    if (!activeMatch || resultRef.current || resolvingRef.current) {
+      reset();
+      return;
+    }
+    if (!window.confirm("Encerrar a partida agora conta como derrota e a aposta será perdida. Deseja continuar?")) return;
+    resolvingRef.current = true;
+    animatingRef.current = false;
+    if (physicsTimerRef.current) clearTimeout(physicsTimerRef.current);
+    if (aiTimerRef.current) clearTimeout(aiTimerRef.current);
+    physicsTimerRef.current = null;
+    aiTimerRef.current = null;
+    sfx.end();
+    (async () => {
+      try {
+        await abandonMatch(activeMatch, "Você encerrou a partida.");
+        const currentBalance = await getBalance();
+        if (mountedRef.current) setBalance(currentBalance);
+        refreshBalance?.();
+      } catch {
+        // A carteira registra a derrota mesmo se a leitura de saldo falhar.
+      } finally {
+        reset();
+      }
+    })();
+  }
+
   function reset() {
     const activeMatch = matchRef.current;
     if (activeMatch && !resultRef.current && !resolvingRef.current) {
@@ -1782,9 +1824,18 @@ export default function Sinuca() {
           <Link to="/" className="inline-flex items-center gap-1.5 text-sm text-white/50 hover:text-white">
             <ArrowLeft className="h-4 w-4" /> Lobby
           </Link>
-          <div role="status" aria-live="polite" className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm ${turn === "player" && !moving ? "border-emerald-300/30 bg-emerald-400/10 text-emerald-100" : "border-white/10 bg-white/5 text-white/60"}`}>
-            {aiThinking ? <BrainCircuit className="h-4 w-4 animate-pulse" /> : <CircleDot className="h-4 w-4" />}
-            {statusText}
+          <div className="flex items-center gap-2">
+            <div role="status" aria-live="polite" className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm ${turn === "player" && !moving ? "border-emerald-300/30 bg-emerald-400/10 text-emerald-100" : "border-white/10 bg-white/5 text-white/60"}`}>
+              {aiThinking ? <BrainCircuit className="h-4 w-4 animate-pulse" /> : <CircleDot className="h-4 w-4" />}
+              {statusText}
+            </div>
+            <button
+              type="button"
+              onClick={endMatch}
+              className="inline-flex items-center gap-1.5 rounded-full border border-rose-400/30 bg-rose-500/10 px-3 py-1.5 text-sm font-semibold text-rose-200 transition hover:bg-rose-500/20 lg:hidden"
+            >
+              <Flag className="h-3.5 w-3.5" /> Encerrar
+            </button>
           </div>
         </div>
         <div className="mb-3">{compactHud}</div>
@@ -1864,6 +1915,14 @@ export default function Sinuca() {
           <div className="font-medium text-amber-100/85">Aposta protegida</div>
           <p className="mt-1">A aposta já está debitada. Vitória paga o pote com a comissão da casa; empate devolve o valor integral.</p>
         </div>
+
+        <button
+          type="button"
+          onClick={endMatch}
+          className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-rose-400/30 bg-rose-500/10 text-sm font-semibold text-rose-200 transition hover:bg-rose-500/20"
+        >
+          <Flag className="h-4 w-4" /> Encerrar partida
+        </button>
       </aside>
 
       {result && (

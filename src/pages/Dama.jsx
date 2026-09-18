@@ -8,6 +8,7 @@ import MatchmakingPanel from "@/components/MatchmakingPanel";
 import OpponentSelect from "@/components/OpponentSelect";
 import { BOT_OPPONENT, canControlTurn, isHumanOpponent, sideLabel } from "@/lib/opponent";
 import { abandonMatch, getHouseConfig, getBalance, placeBet, settleMatch } from "@/lib/wallet";
+import { sfx } from "@/lib/sound";
 
 function Piece({ p }) {
   if (p === 0) return null;
@@ -99,6 +100,9 @@ export default function Dama() {
       payout = match.bet_amount;
       status = "draw";
     }
+    if (status === "won") sfx.win();
+    else if (status === "draw") sfx.draw();
+    else sfx.lose();
     try {
       const newBal = await settleMatch(match, status, payout, houseCut);
       setBalance(newBal);
@@ -136,6 +140,8 @@ export default function Dama() {
       const move = Checkers.bestMove(board, Checkers.BLACK, 4);
       if (!move) { setAiThinking(false); finish("player"); return; }
       const nb = Checkers.applyMove(board, move);
+      if ((move.path?.length || 0) > 0) sfx.capture();
+      else sfx.move();
       setBoard(nb);
       setLastMove(move);
       setAiThinking(false);
@@ -191,6 +197,8 @@ export default function Dama() {
       });
       if (target) {
         const nb = Checkers.applyMove(board, target);
+        if ((target.path?.length || 0) > 0) sfx.capture();
+        else sfx.move();
         setBoard(nb);
         setLastMove(target);
         setSelected(null);
