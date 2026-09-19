@@ -6,14 +6,17 @@ import {
   CircleDot,
   Coins,
   Flag,
+  Flame,
   Gauge,
   Loader2,
   Map,
   Ruler,
   RotateCcw,
   Skull,
+  Sparkles,
   Target,
   Trophy,
+  Zap,
 } from "lucide-react";
 import confetti from "canvas-confetti";
 import LoginGate from "@/components/LoginGate";
@@ -49,18 +52,20 @@ const TEAM_STYLE = {
   player: {
     name: "Vermelhas",
     shortName: "Você",
-    fill: "#d84a3a",
-    dark: "#701f1b",
-    light: "#ffb09a",
+    fill: "#c83226",
+    dark: "#54120f",
+    light: "#ff9f92",
+    groove: "#fde68a",
     text: "text-red-200",
     panel: "bg-red-500/10 border-red-400/25",
   },
   ai: {
     name: "Azuis",
     shortName: "IA",
-    fill: "#3478bb",
-    dark: "#143b6a",
-    light: "#a7d7ff",
+    fill: "#1e64b2",
+    dark: "#0b2650",
+    light: "#9ecaff",
+    groove: "#e0f2fe",
     text: "text-blue-200",
     panel: "bg-blue-500/10 border-blue-400/25",
   },
@@ -93,7 +98,9 @@ function formatMoney(value) {
 }
 
 function formatDistance(value) {
-  return Number.isFinite(value) ? `${Math.round(value)} u` : "--";
+  if (!Number.isFinite(value)) return "--";
+  const cm = value * 0.82;
+  return cm < 100 ? `${cm.toFixed(1).replace(".", ",")} cm` : `${(cm / 100).toFixed(2).replace(".", ",")} m`;
 }
 
 function roundedRectPath(ctx, x, y, width, height, radius) {
@@ -145,6 +152,8 @@ function createWorld(handNumber, headSide, openingTeam) {
     handNumber,
     headSide,
     openingTeam,
+    trails: [],
+    particles: [],
     jack: {
       id: "jack",
       x: preview.x,
@@ -152,9 +161,11 @@ function createWorld(handNumber, headSide, openingTeam) {
       vx: 0,
       vy: 0,
       r: JACK_RADIUS,
-      invMass: 1 / (JACK_RADIUS * JACK_RADIUS),
+      invMass: 1 / (JACK_RADIUS * JACK_RADIUS * 0.45),
       placed: false,
       kind: "jack",
+      rollAngle: 0,
+      heading: 0,
     },
     balls: Array.from({ length: 8 }, (_, index) => ({
       id: `ball-${index}`,
@@ -168,6 +179,8 @@ function createWorld(handNumber, headSide, openingTeam) {
       played: false,
       active: false,
       number: (index % 4) + 1,
+      rollAngle: 0,
+      heading: 0,
     })),
     lastShotId: null,
     lastShotMode: null,
@@ -179,6 +192,8 @@ function cloneWorld(world) {
     ...world,
     jack: { ...world.jack },
     balls: world.balls.map((ball) => ({ ...ball })),
+    trails: [],
+    particles: [],
   };
 }
 
@@ -288,26 +303,47 @@ function physicsObjects(world) {
   ];
 }
 
-function resolveWall(object) {
+function resolveWall(object, onWall = null) {
+  let hit = false;
+  let force = 0;
   if (object.x - object.r < FIELD.left) {
     object.x = FIELD.left + object.r;
-    if (object.vx < 0) object.vx = -object.vx * WALL_RESTITUTION;
+    if (object.vx < 0) {
+      force = Math.abs(object.vx);
+      object.vx = -object.vx * WALL_RESTITUTION;
+      hit = true;
+    }
     object.vy *= 0.985;
   }
   if (object.x + object.r > FIELD.right) {
     object.x = FIELD.right - object.r;
-    if (object.vx > 0) object.vx = -object.vx * WALL_RESTITUTION;
+    if (object.vx > 0) {
+      force = Math.abs(object.vx);
+      object.vx = -object.vx * WALL_RESTITUTION;
+      hit = true;
+    }
     object.vy *= 0.985;
   }
   if (object.y - object.r < FIELD.top) {
     object.y = FIELD.top + object.r;
-    if (object.vy < 0) object.vy = -object.vy * WALL_RESTITUTION;
+    if (object.vy < 0) {
+      force = Math.abs(object.vy);
+      object.vy = -object.vy * WALL_RESTITUTION;
+      hit = true;
+    }
     object.vx *= 0.985;
   }
   if (object.y + object.r > FIELD.bottom) {
     object.y = FIELD.bottom - object.r;
-    if (object.vy > 0) object.vy = -object.vy * WALL_RESTITUTION;
+    if (object.vy > 0) {
+      force = Math.abs(object.vy);
+      object.vy = -object.vy * WALL_RESTITUTION;
+      hit = true;
+    }
     object.vx *= 0.985;
+  }
+  if (hit && force > 20 && onWall) {
+    onWall(object, force);
   }
 }
 
@@ -319,7 +355,7 @@ function deterministicNormal(a, b) {
   return { x: Math.cos(angle), y: Math.sin(angle) };
 }
 
-function resolveCollision(a, b) {
+function resolveCollision(a, b, onCollision = null) {
   const dx = b.x - a.x;
   const dy = b.y - a.y;
   const minimumDistance = a.r + b.r;
@@ -339,7 +375,7 @@ function resolveCollision(a, b) {
   const relativeNormal = (b.vx - a.vx) * normal.x + (b.vy - a.vy) * normal.y;
   if (relativeNormal >= 0) return;
 
-  const restitution = a.kind === "jack" || b.kind === "jack" ? BALL_RESTITUTION * 0.95 : BALL_RESTITUTION;
+  const restitution = a.kind === "jack" || b.kind === "jack" ? BALL_RESTITUTION * 0.92 : BALL_RESTITUTION;
   const impulse = -(1 + restitution) * relativeNormal / inverseMass;
   a.vx -= impulse * normal.x * a.invMass;
   a.vy -= impulse * normal.y * a.invMass;
@@ -354,23 +390,67 @@ function resolveCollision(a, b) {
   a.vy -= tangentImpulse * tangent.y * a.invMass;
   b.vx += tangentImpulse * tangent.x * b.invMass;
   b.vy += tangentImpulse * tangent.y * b.invMass;
+
+  if (onCollision && Math.abs(relativeNormal) > 12) {
+    onCollision(a, b, Math.abs(relativeNormal), (a.x + b.x) / 2, (a.y + b.y) / 2);
+  }
 }
 
-function stepPhysics(world) {
+function stepPhysics(world, { isLive = false, onCollision = null, onWall = null } = {}) {
   const objects = physicsObjects(world);
   objects.forEach((object) => {
     object.x += object.vx * PHYSICS_STEP;
     object.y += object.vy * PHYSICS_STEP;
-    object.vx *= FRICTION;
-    object.vy *= FRICTION;
-    resolveWall(object);
+
+    const speed = Math.hypot(object.vx, object.vy);
+    if (speed > 0.05) {
+      // Rotação física de esfera rolando no chão
+      object.rollAngle = (object.rollAngle || 0) + (speed * PHYSICS_STEP) / object.r;
+      object.heading = Math.atan2(object.vy, object.vx);
+
+      // Desaceleração realista do saibro/terra batida (rolling resistance de cancha tradicional)
+      const clayDecel = 22 * PHYSICS_STEP;
+      if (speed > clayDecel) {
+        const factor = (speed - clayDecel) / speed;
+        object.vx *= FRICTION * factor;
+        object.vy *= FRICTION * factor;
+      } else {
+        object.vx = 0;
+        object.vy = 0;
+      }
+
+      // Rastro sutil no saibro
+      if (isLive && speed > 22) {
+        if (!world.trails) world.trails = [];
+        if (world.trails.length > 280) world.trails.shift();
+        world.trails.push({
+          x: object.x,
+          y: object.y,
+          r: object.r * 0.72,
+        });
+      }
+    }
+
+    resolveWall(object, onWall);
   });
 
   for (let pass = 0; pass < 4; pass += 1) {
     for (let index = 0; index < objects.length; index += 1) {
-      for (let next = index + 1; next < objects.length; next += 1) resolveCollision(objects[index], objects[next]);
+      for (let next = index + 1; next < objects.length; next += 1) {
+        resolveCollision(objects[index], objects[next], onCollision);
+      }
     }
-    objects.forEach(resolveWall);
+    objects.forEach((obj) => resolveWall(obj, onWall));
+  }
+
+  // Atualiza partículas ativas
+  if (isLive && world.particles && world.particles.length > 0) {
+    world.particles.forEach((p) => {
+      p.x += p.vx * PHYSICS_STEP;
+      p.y += p.vy * PHYSICS_STEP;
+      p.life -= PHYSICS_STEP * 2.8;
+    });
+    world.particles = world.particles.filter((p) => p.life > 0);
   }
 
   objects.forEach((object) => {
@@ -456,97 +536,149 @@ function buildCourtBackground() {
   const ctx = background.getContext("2d");
   if (!ctx) return background;
 
+  // Piso do ginásio/galpão de bocha
   const night = ctx.createLinearGradient(0, 0, COURT_W, COURT_H);
-  night.addColorStop(0, "#090c0c");
-  night.addColorStop(0.48, "#1a1815");
-  night.addColorStop(1, "#080a0a");
+  night.addColorStop(0, "#080b0b");
+  night.addColorStop(0.5, "#151310");
+  night.addColorStop(1, "#070909");
   ctx.fillStyle = night;
   ctx.fillRect(0, 0, COURT_W, COURT_H);
 
+  // Moldura de madeira nobre maciça (Ipê / Canela)
   roundedRectPath(ctx, FRAME.left, FRAME.top, FRAME.right - FRAME.left, FRAME.bottom - FRAME.top, 22);
   const wood = ctx.createLinearGradient(FRAME.left, FRAME.top, FRAME.right, FRAME.bottom);
-  wood.addColorStop(0, "#744324");
-  wood.addColorStop(0.22, "#3e2518");
-  wood.addColorStop(0.58, "#6b391d");
-  wood.addColorStop(1, "#21130d");
+  wood.addColorStop(0, "#6e3b1c");
+  wood.addColorStop(0.2, "#3b2014");
+  wood.addColorStop(0.55, "#613318");
+  wood.addColorStop(1, "#1c0e09");
   ctx.fillStyle = wood;
   ctx.fill();
 
+  // Veios naturais da madeira nobre
   ctx.save();
   roundedRectPath(ctx, FRAME.left, FRAME.top, FRAME.right - FRAME.left, FRAME.bottom - FRAME.top, 22);
   ctx.clip();
-  ctx.globalAlpha = 0.18;
-  ctx.strokeStyle = "#f1ae6a";
+  ctx.globalAlpha = 0.22;
+  ctx.strokeStyle = "#f3b372";
   ctx.lineWidth = 1;
   for (let index = -15; index < 145; index += 1) {
     const y = FRAME.top + index * 4.6;
     ctx.beginPath();
     ctx.moveTo(FRAME.left - 20, y);
-    ctx.bezierCurveTo(310, y + Math.sin(index) * 8, 720, y - Math.cos(index * 0.75) * 9, FRAME.right + 20, y + Math.sin(index * 0.35) * 7);
+    ctx.bezierCurveTo(
+      310,
+      y + Math.sin(index) * 8,
+      720,
+      y - Math.cos(index * 0.75) * 9,
+      FRAME.right + 20,
+      y + Math.sin(index * 0.35) * 7
+    );
     ctx.stroke();
   }
   ctx.restore();
 
+  // Cantoneiras de latão com parafusos nas quinas da cancha
+  const brassCorners = [
+    { x: FRAME.left + 16, y: FRAME.top + 16 },
+    { x: FRAME.right - 16, y: FRAME.top + 16 },
+    { x: FRAME.left + 16, y: FRAME.bottom - 16 },
+    { x: FRAME.right - 16, y: FRAME.bottom - 16 },
+  ];
+  brassCorners.forEach(({ x, y }) => {
+    ctx.beginPath();
+    ctx.arc(x, y, 5, 0, Math.PI * 2);
+    ctx.fillStyle = "#c99a3e";
+    ctx.fill();
+    ctx.strokeStyle = "#4a320c";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    // Fenda do parafuso
+    ctx.beginPath();
+    ctx.moveTo(x - 3, y - 1);
+    ctx.lineTo(x + 3, y + 1);
+    ctx.strokeStyle = "#2e1e07";
+    ctx.stroke();
+  });
+
+  // Guarnição interna em pedra/borracha de amortecimento
   roundedRectPath(ctx, 43, 43, COURT_W - 86, COURT_H - 86, 16);
   const stone = ctx.createLinearGradient(0, 43, 0, COURT_H - 43);
-  stone.addColorStop(0, "#c5b58f");
-  stone.addColorStop(0.08, "#68645a");
-  stone.addColorStop(0.5, "#282c29");
-  stone.addColorStop(0.91, "#706c61");
-  stone.addColorStop(1, "#c4ad7d");
+  stone.addColorStop(0, "#bfaf88");
+  stone.addColorStop(0.08, "#635f55");
+  stone.addColorStop(0.5, "#252826");
+  stone.addColorStop(0.92, "#68655b");
+  stone.addColorStop(1, "#bea878");
   ctx.fillStyle = stone;
   ctx.fill();
   ctx.strokeStyle = "rgba(255,244,207,0.35)";
   ctx.lineWidth = 1.3;
   ctx.stroke();
 
+  // Caixa da cancha
   roundedRectPath(ctx, FIELD.left - 10, FIELD.top - 10, FIELD.right - FIELD.left + 20, FIELD.bottom - FIELD.top + 20, 11);
-  ctx.fillStyle = "#271813";
+  ctx.fillStyle = "#221410";
   ctx.fill();
 
-  const clay = ctx.createRadialGradient(550, 150, 20, 540, 302, 650);
-  clay.addColorStop(0, "#df9962");
-  clay.addColorStop(0.38, "#c8764b");
-  clay.addColorStop(0.76, "#9e5035");
-  clay.addColorStop(1, "#632b20");
+  // Superfície de Saibro / Terra Batida Vermelha Tradicional
+  const clay = ctx.createRadialGradient(550, 170, 30, 540, 290, 680);
+  clay.addColorStop(0, "#e4985f");
+  clay.addColorStop(0.35, "#cb7247");
+  clay.addColorStop(0.72, "#a04c32");
+  clay.addColorStop(1, "#5f261c");
   ctx.fillStyle = clay;
   ctx.fillRect(FIELD.left, FIELD.top, FIELD.right - FIELD.left, FIELD.bottom - FIELD.top);
 
+  // Granulação fina do saibro prensado
   ctx.save();
   ctx.beginPath();
   ctx.rect(FIELD.left, FIELD.top, FIELD.right - FIELD.left, FIELD.bottom - FIELD.top);
   ctx.clip();
-  for (let index = 0; index < 620; index += 1) {
-    const x = FIELD.left + ((index * 79 + (index % 7) * 13) % (FIELD.right - FIELD.left));
-    const y = FIELD.top + ((index * 43 + (index % 11) * 9) % (FIELD.bottom - FIELD.top));
-    const size = 0.4 + (index % 5) * 0.28;
-    ctx.fillStyle = index % 3 === 0 ? "rgba(255,215,153,0.16)" : "rgba(61,25,17,0.16)";
+  for (let index = 0; index < 750; index += 1) {
+    const x = FIELD.left + ((index * 83 + (index % 7) * 17) % (FIELD.right - FIELD.left));
+    const y = FIELD.top + ((index * 47 + (index % 11) * 11) % (FIELD.bottom - FIELD.top));
+    const size = 0.4 + (index % 5) * 0.32;
+    ctx.fillStyle = index % 3 === 0 ? "rgba(255,225,165,0.18)" : "rgba(50,20,12,0.22)";
     ctx.fillRect(x, y, size, size);
   }
-  ctx.globalAlpha = 0.12;
-  ctx.strokeStyle = "#f7c78e";
+
+  // Estrias sutis de rastelo na terra batida
+  ctx.globalAlpha = 0.11;
+  ctx.strokeStyle = "#f8cb92";
   ctx.lineWidth = 1;
-  for (let index = -12; index < 82; index += 1) {
-    const y = FIELD.top + index * 7;
+  for (let index = -12; index < 85; index += 1) {
+    const y = FIELD.top + index * 6.5;
     ctx.beginPath();
     ctx.moveTo(FIELD.left, y);
-    ctx.lineTo(FIELD.right, y + 20);
+    ctx.lineTo(FIELD.right, y + 15);
     ctx.stroke();
   }
+
+  // Refletores de teto (iluminação cenográfica de ginásio de bocha)
+  const lampCenter = ctx.createRadialGradient(COURT_W / 2, COURT_H / 2, 40, COURT_W / 2, COURT_H / 2, 450);
+  lampCenter.addColorStop(0, "rgba(255, 235, 190, 0.16)");
+  lampCenter.addColorStop(0.5, "rgba(255, 215, 150, 0.05)");
+  lampCenter.addColorStop(1, "rgba(0, 0, 0, 0)");
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = lampCenter;
+  ctx.fillRect(FIELD.left, FIELD.top, FIELD.right - FIELD.left, FIELD.bottom - FIELD.top);
+
   ctx.restore();
 
   drawSurface(ctx, FIELD.left, FIELD.top, FIELD.right - FIELD.left, FIELD.bottom - FIELD.top, "clay");
-  ctx.strokeStyle = "rgba(52,20,13,0.82)";
+
+  // Bordas de madeira interna da cancha
+  ctx.strokeStyle = "rgba(48,18,11,0.85)";
   ctx.lineWidth = 4;
   ctx.strokeRect(FIELD.left, FIELD.top, FIELD.right - FIELD.left, FIELD.bottom - FIELD.top);
-  ctx.strokeStyle = "rgba(255,225,172,0.25)";
+  ctx.strokeStyle = "rgba(255,225,172,0.28)";
   ctx.lineWidth = 1;
   ctx.strokeRect(FIELD.left + 4, FIELD.top + 4, FIELD.right - FIELD.left - 8, FIELD.bottom - FIELD.top - 8);
 
-  ctx.fillStyle = "rgba(34,19,14,0.34)";
+  // Amortecedores laterais
+  ctx.fillStyle = "rgba(30,16,12,0.36)";
   ctx.fillRect(FIELD.left - 1, FIELD.top - 8, FIELD.right - FIELD.left + 2, 8);
   ctx.fillRect(FIELD.left - 1, FIELD.bottom, FIELD.right - FIELD.left + 2, 8);
-  ctx.strokeStyle = "rgba(255,228,183,0.22)";
+  ctx.strokeStyle = "rgba(255,228,183,0.24)";
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(FIELD.left, FIELD.top - 4);
@@ -555,10 +687,11 @@ function buildCourtBackground() {
   ctx.lineTo(FIELD.right, FIELD.bottom + 4);
   ctx.stroke();
 
+  // Linhas de cabeceira oficiais
   ctx.save();
   ctx.setLineDash([5, 8]);
-  ctx.strokeStyle = "rgba(255,232,194,0.44)";
-  ctx.lineWidth = 1.5;
+  ctx.strokeStyle = "rgba(255,235,200,0.52)";
+  ctx.lineWidth = 1.6;
   [getHeadGeometry("left").lineX, getHeadGeometry("right").lineX].forEach((x) => {
     ctx.beginPath();
     ctx.moveTo(x, FIELD.top + 5);
@@ -567,40 +700,76 @@ function buildCourtBackground() {
   });
   ctx.restore();
 
-  ctx.strokeStyle = "rgba(255,237,204,0.16)";
-  ctx.lineWidth = 1;
+  // Linha do meio da cancha (Zona Neutra)
+  const midCourtX = (FIELD.left + FIELD.right) / 2;
+  ctx.strokeStyle = "rgba(255,237,204,0.22)";
+  ctx.lineWidth = 1.2;
   ctx.beginPath();
-  ctx.moveTo((FIELD.left + FIELD.right) / 2, FIELD.top + 12);
-  ctx.lineTo((FIELD.left + FIELD.right) / 2, FIELD.bottom - 12);
+  ctx.moveTo(midCourtX, FIELD.top + 10);
+  ctx.lineTo(midCourtX, FIELD.bottom - 10);
   ctx.stroke();
 
-  ctx.fillStyle = "rgba(255,241,215,0.55)";
-  ctx.font = "800 10px ui-sans-serif, system-ui, sans-serif";
-  ctx.fillText("CANCHA ARENA · BOCHA GAÚCHA", 72, 38);
-  ctx.textAlign = "right";
-  ctx.fillStyle = "rgba(255,241,215,0.34)";
-  ctx.fillText("TERRA BATIDA / ESCALA 1:1", 1028, 38);
+  ctx.fillStyle = "rgba(255,237,204,0.32)";
+  ctx.font = "700 8.5px ui-sans-serif, system-ui, sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText("LINHA DO MEIO · CANCHA NEUTRA", midCourtX, FIELD.top + 20);
   ctx.textAlign = "left";
 
-  ctx.fillStyle = "rgba(255,225,180,0.42)";
-  ctx.font = "700 9px ui-sans-serif, system-ui, sans-serif";
-  ctx.fillText("CABECEIRA E", getHeadGeometry("left").lineX - 26, FIELD.bottom + 26);
-  ctx.fillText("CABECEIRA D", getHeadGeometry("right").lineX - 26, FIELD.bottom + 26);
+  // Identificação da Cancha
+  ctx.fillStyle = "rgba(255,241,215,0.62)";
+  ctx.font = "800 10.5px ui-sans-serif, system-ui, sans-serif";
+  ctx.fillText("CANCHA DE BOCHA GAÚCHA · ARENABET", 72, 38);
+  ctx.textAlign = "right";
+  ctx.fillStyle = "rgba(255,241,215,0.38)";
+  ctx.fillText("SAIBRO TRATADO / REGULAMENTO OFICIAL", 1028, 38);
+  ctx.textAlign = "left";
 
-  ctx.fillStyle = "rgba(255,229,181,0.5)";
+  ctx.fillStyle = "rgba(255,225,180,0.48)";
+  ctx.font = "700 9px ui-sans-serif, system-ui, sans-serif";
+  ctx.fillText("CABECEIRA ESQUERDA", getHeadGeometry("left").lineX - 42, FIELD.bottom + 26);
+  ctx.fillText("CABECEIRA DIREITA", getHeadGeometry("right").lineX - 38, FIELD.bottom + 26);
+
+  // Régua métrica ao longo da borda inferior em metros reais (0m a 12m)
+  ctx.fillStyle = "rgba(255,229,181,0.52)";
   ctx.font = "700 9px ui-monospace, SFMono-Regular, Menlo, monospace";
-  ctx.fillText("RÉGUA DE DISTÂNCIA · u", 72, 528);
-  for (let index = 0; index <= 10; index += 1) {
-    const x = 270 + index * 70;
-    const tickHeight = index % 5 === 0 ? 11 : 6;
-    ctx.strokeStyle = index % 5 === 0 ? "rgba(255,230,184,0.65)" : "rgba(255,230,184,0.3)";
+  ctx.fillText("RÉGUA DA CANCHA · METROS", 72, 528);
+  for (let index = 0; index <= 12; index += 1) {
+    const x = 240 + index * 60;
+    const isMajor = index % 2 === 0;
+    const tickHeight = isMajor ? 11 : 6;
+    ctx.strokeStyle = isMajor ? "rgba(255,230,184,0.7)" : "rgba(255,230,184,0.32)";
     ctx.beginPath();
     ctx.moveTo(x, 526);
     ctx.lineTo(x, 526 - tickHeight);
     ctx.stroke();
-    if (index < 10 && index % 5 === 0) ctx.fillText(`${index * 100}`, x - 7, 548);
+    if (isMajor) ctx.fillText(`${index}m`, x - 7, 548);
   }
   return background;
+}
+
+function drawSandTrails(ctx, world) {
+  if (!world.trails || !world.trails.length) return;
+  ctx.save();
+  world.trails.forEach((trail) => {
+    ctx.beginPath();
+    ctx.arc(trail.x, trail.y, trail.r, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(45, 18, 10, 0.08)";
+    ctx.fill();
+  });
+  ctx.restore();
+}
+
+function drawParticles(ctx, world) {
+  if (!world.particles || !world.particles.length) return;
+  ctx.save();
+  world.particles.forEach((p) => {
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+    ctx.fillStyle = p.color;
+    ctx.globalAlpha = clamp(p.life, 0, 1);
+    ctx.fill();
+  });
+  ctx.restore();
 }
 
 function drawSphere(ctx, ball, { ghost = false, highlight = false } = {}) {
@@ -608,90 +777,164 @@ function drawSphere(ctx, ball, { ghost = false, highlight = false } = {}) {
   ctx.save();
   ctx.globalAlpha = ghost ? 0.46 : 1;
   const speed = Math.hypot(ball.vx || 0, ball.vy || 0);
-  const shadowX = ball.x + 5 + Math.min(4, speed * 0.008);
-  const shadowY = ball.y + 8 + Math.min(3, speed * 0.006);
-  ctx.beginPath();
-  ctx.ellipse(shadowX, shadowY, ball.r * 0.95, ball.r * 0.62, 0, 0, Math.PI * 2);
-  ctx.fillStyle = "rgba(27,12,9,0.52)";
-  ctx.filter = "blur(2px)";
-  ctx.fill();
-  ctx.filter = "none";
+  const roll = ball.rollAngle || 0;
+  const heading = ball.heading || 0;
 
-  const gradient = ctx.createRadialGradient(ball.x - ball.r * 0.42, ball.y - ball.r * 0.5, 1, ball.x, ball.y, ball.r * 1.1);
-  gradient.addColorStop(0, "#fff9ec");
-  gradient.addColorStop(0.13, style.light);
-  gradient.addColorStop(0.46, style.fill);
-  gradient.addColorStop(0.86, style.fill);
-  gradient.addColorStop(1, style.dark);
+  // 1. Sombra de oclusão no ponto de contato no saibro
+  ctx.beginPath();
+  ctx.ellipse(ball.x, ball.y + ball.r * 0.82, ball.r * 0.84, ball.r * 0.3, 0, 0, Math.PI * 2);
+  ctx.fillStyle = "rgba(18, 7, 4, 0.72)";
+  ctx.fill();
+
+  // 2. Sombra difusa projetada pela iluminação do ginásio
+  const shadowDist = 6 + Math.min(4, speed * 0.008);
+  ctx.beginPath();
+  ctx.ellipse(ball.x + shadowDist * 0.6, ball.y + shadowDist, ball.r * 1.05, ball.r * 0.58, 0.22, 0, Math.PI * 2);
+  ctx.fillStyle = "rgba(22, 9, 5, 0.38)";
+  ctx.fill();
+
+  // 3. Gradiente esférico da resina polida de alta densidade
+  const gradient = ctx.createRadialGradient(
+    ball.x - ball.r * 0.38,
+    ball.y - ball.r * 0.44,
+    1,
+    ball.x,
+    ball.y,
+    ball.r * 1.08
+  );
+  gradient.addColorStop(0, "#fffbf2");
+  gradient.addColorStop(0.12, style.light);
+  gradient.addColorStop(0.48, style.fill);
+  gradient.addColorStop(0.85, style.dark);
+  gradient.addColorStop(1, "#180a08");
+
   ctx.beginPath();
   ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI * 2);
   ctx.fillStyle = gradient;
   ctx.fill();
-  ctx.lineWidth = highlight ? 2.5 : 1.3;
-  ctx.strokeStyle = highlight ? "rgba(255,243,192,0.95)" : style.dark;
+
+  // 4. Ranhuras usinadas em relevo (bochas raiadas tradicionais de competição)
+  // As ranhuras giram em perspectiva 3D conforme o rolamento e o trajeto!
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(ball.x, ball.y, ball.r - 0.5, 0, Math.PI * 2);
+  ctx.clip();
+
+  ctx.translate(ball.x, ball.y);
+  ctx.rotate(heading);
+
+  const grooveOffsets = [-ball.r * 0.35, 0, ball.r * 0.35];
+  grooveOffsets.forEach((offsetY) => {
+    const cosRoll = Math.cos(roll + offsetY * 0.1);
+    const radiusY = Math.max(1.5, Math.abs(cosRoll) * ball.r * 0.7);
+    ctx.beginPath();
+    ctx.ellipse(offsetY * 0.4, 0, ball.r * 0.88, radiusY, 0, 0, Math.PI * 2);
+    // Sombra interna da ranhura usinada
+    ctx.strokeStyle = "rgba(18, 5, 3, 0.45)";
+    ctx.lineWidth = 1.6;
+    ctx.stroke();
+    // Brilho na borda usinada da ranhura
+    ctx.strokeStyle = style.groove ? `${style.groove}44` : "rgba(255, 240, 200, 0.28)";
+    ctx.lineWidth = 0.8;
+    ctx.stroke();
+  });
+
+  ctx.restore();
+
+  // 5. Contorno e anel de realce
+  ctx.lineWidth = highlight ? 2.4 : 1.2;
+  ctx.strokeStyle = highlight ? "rgba(255, 243, 192, 0.95)" : "rgba(35, 12, 8, 0.65)";
   ctx.stroke();
 
-  ctx.beginPath();
-  ctx.arc(ball.x, ball.y, ball.r * 0.66, -0.55, Math.PI * 0.84);
-  ctx.strokeStyle = "rgba(255,255,255,0.2)";
-  ctx.lineWidth = 1;
-  ctx.stroke();
+  // 6. Número oficial gravado em baixo relevo
   if (!ghost && ball.number) {
     ctx.beginPath();
-    ctx.arc(ball.x, ball.y, ball.r * 0.42, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(25,16,14,0.28)";
+    ctx.arc(ball.x, ball.y, ball.r * 0.38, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(15, 8, 6, 0.36)";
     ctx.fill();
-    ctx.fillStyle = "rgba(255,246,228,0.92)";
-    ctx.font = "800 9px ui-sans-serif, system-ui, sans-serif";
+    ctx.strokeStyle = "rgba(255, 235, 190, 0.35)";
+    ctx.lineWidth = 0.8;
+    ctx.stroke();
+    ctx.fillStyle = "#fffaf0";
+    ctx.font = "800 9.5px ui-sans-serif, system-ui, sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(ball.number, ball.x, ball.y + 0.5);
   }
 
-  const highlightGradient = ctx.createRadialGradient(ball.x - ball.r * 0.42, ball.y - ball.r * 0.48, 0, ball.x - ball.r * 0.42, ball.y - ball.r * 0.48, ball.r * 0.42);
-  highlightGradient.addColorStop(0, "rgba(255,255,255,0.78)");
-  highlightGradient.addColorStop(1, "rgba(255,255,255,0)");
+  // 7. Reflexo especular duplo (luz difusa de ginásio + brilho pontual cristalino)
+  const glint = ctx.createRadialGradient(
+    ball.x - ball.r * 0.4,
+    ball.y - ball.r * 0.46,
+    0,
+    ball.x - ball.r * 0.4,
+    ball.y - ball.r * 0.46,
+    ball.r * 0.42
+  );
+  glint.addColorStop(0, "rgba(255, 255, 255, 0.82)");
+  glint.addColorStop(0.35, "rgba(255, 255, 255, 0.32)");
+  glint.addColorStop(1, "rgba(255, 255, 255, 0)");
   ctx.beginPath();
-  ctx.arc(ball.x - ball.r * 0.4, ball.y - ball.r * 0.45, ball.r * 0.3, 0, Math.PI * 2);
-  ctx.fillStyle = highlightGradient;
+  ctx.arc(ball.x - ball.r * 0.4, ball.y - ball.r * 0.46, ball.r * 0.38, 0, Math.PI * 2);
+  ctx.fillStyle = glint;
   ctx.fill();
+
   ctx.restore();
 }
 
 function drawJack(ctx, jack, { ghost = false, highlight = false } = {}) {
   ctx.save();
   ctx.globalAlpha = ghost ? 0.5 : 1;
-  ctx.beginPath();
-  ctx.ellipse(jack.x + 4, jack.y + 7, jack.r * 1.05, jack.r * 0.66, 0, 0, Math.PI * 2);
-  ctx.fillStyle = "rgba(31,15,7,0.52)";
-  ctx.filter = "blur(2px)";
-  ctx.fill();
-  ctx.filter = "none";
 
+  // Sombra de contato no saibro
+  ctx.beginPath();
+  ctx.ellipse(jack.x, jack.y + jack.r * 0.78, jack.r * 0.82, jack.r * 0.3, 0, 0, Math.PI * 2);
+  ctx.fillStyle = "rgba(20, 8, 4, 0.72)";
+  ctx.fill();
+
+  // Sombra suave difusa
+  ctx.beginPath();
+  ctx.ellipse(jack.x + 4, jack.y + 6, jack.r * 1.05, jack.r * 0.6, 0.2, 0, Math.PI * 2);
+  ctx.fillStyle = "rgba(25, 11, 6, 0.4)";
+  ctx.fill();
+
+  // Halo sutil de localização na cancha
   const glow = ctx.createRadialGradient(jack.x, jack.y, jack.r, jack.x, jack.y, jack.r * 2.8);
-  glow.addColorStop(0, "rgba(255,224,83,0.38)");
-  glow.addColorStop(1, "rgba(255,224,83,0)");
+  glow.addColorStop(0, "rgba(255, 224, 83, 0.32)");
+  glow.addColorStop(1, "rgba(255, 224, 83, 0)");
   ctx.beginPath();
   ctx.arc(jack.x, jack.y, jack.r * 2.8, 0, Math.PI * 2);
   ctx.fillStyle = glow;
   ctx.fill();
 
-  const gradient = ctx.createRadialGradient(jack.x - 4, jack.y - 5, 1, jack.x, jack.y, jack.r * 1.15);
-  gradient.addColorStop(0, "#fffbd0");
-  gradient.addColorStop(0.24, "#ffe45b");
-  gradient.addColorStop(0.82, "#e5a916");
-  gradient.addColorStop(1, "#82590d");
+  // Bolim esmaltado amarelo tradicional (canary yellow pallino)
+  const gradient = ctx.createRadialGradient(
+    jack.x - jack.r * 0.38,
+    jack.y - jack.r * 0.42,
+    1,
+    jack.x,
+    jack.y,
+    jack.r * 1.15
+  );
+  gradient.addColorStop(0, "#fffff0");
+  gradient.addColorStop(0.25, "#fff068");
+  gradient.addColorStop(0.72, "#f0ab0a");
+  gradient.addColorStop(1, "#8f5707");
   ctx.beginPath();
   ctx.arc(jack.x, jack.y, jack.r, 0, Math.PI * 2);
   ctx.fillStyle = gradient;
   ctx.fill();
-  ctx.lineWidth = highlight ? 2.4 : 1.3;
-  ctx.strokeStyle = highlight ? "rgba(255,251,183,0.95)" : "#8b5d0d";
+
+  ctx.lineWidth = highlight ? 2.4 : 1.2;
+  ctx.strokeStyle = highlight ? "rgba(255, 252, 190, 0.95)" : "rgba(100, 58, 6, 0.8)";
   ctx.stroke();
+
+  // Ponto de brilho especular
   ctx.beginPath();
-  ctx.arc(jack.x - 3.5, jack.y - 4, 2.4, 0, Math.PI * 2);
-  ctx.fillStyle = "rgba(255,255,255,0.76)";
+  ctx.arc(jack.x - jack.r * 0.35, jack.y - jack.r * 0.38, jack.r * 0.32, 0, Math.PI * 2);
+  ctx.fillStyle = "rgba(255, 255, 255, 0.85)";
   ctx.fill();
+
   ctx.restore();
 }
 
@@ -700,24 +943,25 @@ function drawJackZone(ctx, world, dragging) {
   const width = geometry.validMaxX - geometry.validMinX;
   const height = geometry.validMaxY - geometry.validMinY;
   ctx.save();
-  ctx.fillStyle = dragging ? "rgba(255,222,118,0.12)" : "rgba(255,222,118,0.06)";
+  ctx.fillStyle = dragging ? "rgba(255,222,118,0.14)" : "rgba(255,222,118,0.06)";
   ctx.fillRect(geometry.validMinX, geometry.validMinY, width, height);
   ctx.setLineDash([6, 8]);
-  ctx.strokeStyle = dragging ? "rgba(255,238,160,0.9)" : "rgba(255,231,165,0.5)";
+  ctx.strokeStyle = dragging ? "rgba(255,238,160,0.92)" : "rgba(255,231,165,0.5)";
   ctx.lineWidth = 1.5;
   ctx.strokeRect(geometry.validMinX, geometry.validMinY, width, height);
   ctx.setLineDash([]);
-  ctx.fillStyle = "rgba(255,243,195,0.76)";
+  ctx.fillStyle = "rgba(255,243,195,0.8)";
   ctx.font = "800 10px ui-sans-serif, system-ui, sans-serif";
-  ctx.fillText("ZONA VÁLIDA DO BOLIM", geometry.validMinX + 12, geometry.validMinY + 20);
-  ctx.fillStyle = "rgba(255,243,195,0.42)";
+  ctx.fillText("ZONA REGULAMENTAR DO BOLIM", geometry.validMinX + 12, geometry.validMinY + 20);
+  ctx.fillStyle = "rgba(255,243,195,0.48)";
   ctx.font = "700 9px ui-monospace, SFMono-Regular, Menlo, monospace";
-  ctx.fillText("arraste da cabeceira", geometry.validMinX + 12, geometry.validMinY + 35);
+  ctx.fillText("solte nesta área para iniciar a mão", geometry.validMinX + 12, geometry.validMinY + 35);
   ctx.restore();
 }
 
 function drawAimGuide(ctx, aim, world) {
   const prediction = aim.prediction;
+  const isBochada = aim.shotType === "bochada";
   const fallbackTravel = (MAX_SPEED * aim.power * PHYSICS_STEP) / Math.max(0.001, 1 - FRICTION);
   const fallbackStop = {
     x: aim.anchor.x + aim.dir.x * fallbackTravel,
@@ -727,10 +971,12 @@ function drawAimGuide(ctx, aim, world) {
   const path = prediction?.path?.length > 1 ? prediction.path : [aim.anchor, fallbackStop];
   const style = TEAM_STYLE.player;
   ctx.save();
-  ctx.globalAlpha = 0.88;
-  ctx.setLineDash([7, 8]);
-  ctx.strokeStyle = "rgba(255,247,215,0.9)";
-  ctx.lineWidth = 2;
+  ctx.globalAlpha = 0.92;
+
+  // Trajetória: linha pontilhada enérgica se for tiro/bochada, suave se for ponto/arrimo
+  ctx.setLineDash(isBochada ? [9, 6] : [6, 7]);
+  ctx.strokeStyle = isBochada ? "rgba(251, 146, 60, 0.95)" : "rgba(255, 247, 215, 0.92)";
+  ctx.lineWidth = isBochada ? 2.6 : 1.8;
   ctx.beginPath();
   path.forEach((point, index) => {
     const x = clamp(point.x, FIELD.left, FIELD.right);
@@ -748,20 +994,39 @@ function drawAimGuide(ctx, aim, world) {
   ctx.lineTo(end.x - aim.dir.x * 12 + side.x * 7, end.y - aim.dir.y * 12 + side.y * 7);
   ctx.lineTo(end.x - aim.dir.x * 12 - side.x * 7, end.y - aim.dir.y * 12 - side.y * 7);
   ctx.closePath();
-  ctx.fillStyle = "rgba(255,247,215,0.9)";
+  ctx.fillStyle = isBochada ? "rgba(251, 146, 60, 0.95)" : "rgba(255, 247, 215, 0.92)";
   ctx.fill();
 
   const zoneX = clamp(stop.x, FIELD.left + BALL_RADIUS, FIELD.right - BALL_RADIUS);
   const zoneY = clamp(stop.y, FIELD.top + BALL_RADIUS, FIELD.bottom - BALL_RADIUS);
-  ctx.beginPath();
-  ctx.ellipse(zoneX, zoneY, 20 + aim.power * 22, 12 + aim.power * 12, Math.atan2(aim.dir.y, aim.dir.x), 0, Math.PI * 2);
-  ctx.fillStyle = "rgba(255,228,135,0.16)";
-  ctx.fill();
-  ctx.strokeStyle = "rgba(255,240,167,0.8)";
-  ctx.lineWidth = 1.4;
-  ctx.setLineDash([3, 5]);
-  ctx.stroke();
-  ctx.setLineDash([]);
+
+  if (isBochada) {
+    // Alvo de impacto de bochada
+    ctx.beginPath();
+    ctx.arc(zoneX, zoneY, 22, 0, Math.PI * 2);
+    ctx.strokeStyle = "rgba(251, 146, 60, 0.85)";
+    ctx.lineWidth = 1.6;
+    ctx.stroke();
+    // Mira em cruz
+    ctx.beginPath();
+    ctx.moveTo(zoneX - 10, zoneY);
+    ctx.lineTo(zoneX + 10, zoneY);
+    ctx.moveTo(zoneX, zoneY - 10);
+    ctx.lineTo(zoneX, zoneY + 10);
+    ctx.strokeStyle = "rgba(255, 237, 213, 0.9)";
+    ctx.stroke();
+  } else {
+    // Zona de parada de precisão do arrimo
+    ctx.beginPath();
+    ctx.ellipse(zoneX, zoneY, 18 + aim.power * 20, 11 + aim.power * 11, Math.atan2(aim.dir.y, aim.dir.x), 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(255,228,135,0.18)";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(255,240,167,0.85)";
+    ctx.lineWidth = 1.4;
+    ctx.setLineDash([3, 5]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
 
   drawSphere(ctx, {
     id: "aim-ball",
@@ -773,9 +1038,14 @@ function drawAimGuide(ctx, aim, world) {
     r: BALL_RADIUS,
     number: 0,
   }, { ghost: true });
-  ctx.fillStyle = "rgba(255,247,215,0.82)";
-  ctx.font = "800 9px ui-monospace, SFMono-Regular, Menlo, monospace";
-  ctx.fillText(`PARADA ~ ${formatDistance(distance({ x: zoneX, y: zoneY }, world.jack))}`, zoneX + 17, zoneY - 16);
+
+  ctx.fillStyle = isBochada ? "#fed7aa" : "rgba(255,247,215,0.88)";
+  ctx.font = "800 9.5px ui-monospace, SFMono-Regular, Menlo, monospace";
+  if (isBochada) {
+    ctx.fillText("💥 BOCHADA (TIRO POTENTE)", zoneX + 17, zoneY - 16);
+  } else {
+    ctx.fillText(`🎯 ARRIMADA ~ ${formatDistance(distance({ x: zoneX, y: zoneY }, world.jack))}`, zoneX + 17, zoneY - 16);
+  }
   ctx.fillStyle = style.light;
   ctx.fillText(`${Math.round(aim.power * 100)}%`, aim.anchor.x + 21, aim.anchor.y - 18);
   ctx.restore();
@@ -811,34 +1081,74 @@ function drawMeasurement(ctx, world) {
   if (!world.jack.placed) return;
   const activeBalls = world.balls.filter((ball) => ball.active);
   if (!activeBalls.length) return;
-  const measured = activeBalls.find((ball) => ball.id === world.lastShotId)
-    || activeBalls.slice().sort((left, right) => distance(left, world.jack) - distance(right, world.jack))[0];
-  const measuredDistance = distance(measured, world.jack);
+
+  const overallBest = activeBalls.slice().sort((left, right) => distance(left, world.jack) - distance(right, world.jack))[0];
+  const bestDist = distance(overallBest, world.jack);
+
   ctx.save();
-  ctx.setLineDash([3, 5]);
-  ctx.strokeStyle = TEAM_STYLE[measured.team].light;
-  ctx.globalAlpha = 0.72;
-  ctx.lineWidth = 1.4;
+
+  // 1. Círculo regulamentar do raio do ponto (mostra a marca exata a ser batida)
   ctx.beginPath();
-  ctx.moveTo(world.jack.x, world.jack.y);
-  ctx.lineTo(measured.x, measured.y);
+  ctx.arc(world.jack.x, world.jack.y, bestDist, 0, Math.PI * 2);
+  ctx.strokeStyle = overallBest.team === "player" ? "rgba(239, 68, 68, 0.42)" : "rgba(59, 130, 246, 0.42)";
+  ctx.lineWidth = 1.3;
+  ctx.setLineDash([4, 6]);
   ctx.stroke();
   ctx.setLineDash([]);
+
+  // 2. Trena oficial milimétrica amarela esticada do bolim até a bola mais próxima
+  const dx = overallBest.x - world.jack.x;
+  const dy = overallBest.y - world.jack.y;
+  const angle = Math.atan2(dy, dx);
+  const perp = { x: -Math.sin(angle), y: Math.cos(angle) };
+
+  // Fita amarela da trena
   ctx.beginPath();
-  ctx.arc(world.jack.x, world.jack.y, 24, 0, Math.PI * 2);
-  ctx.strokeStyle = "rgba(255,234,122,0.5)";
+  ctx.moveTo(world.jack.x, world.jack.y);
+  ctx.lineTo(overallBest.x, overallBest.y);
+  ctx.strokeStyle = "rgba(250, 204, 21, 0.9)";
+  ctx.lineWidth = 3.2;
   ctx.stroke();
-  const labelX = (world.jack.x + measured.x) / 2;
-  const labelY = (world.jack.y + measured.y) / 2 - 8;
-  roundedRectPath(ctx, labelX - 24, labelY - 9, 48, 17, 7);
-  ctx.fillStyle = "rgba(13,13,11,0.78)";
+
+  // Traços milimétricos impressos na trena
+  ctx.strokeStyle = "rgba(35, 18, 8, 0.8)";
+  ctx.lineWidth = 1;
+  const tickCount = Math.floor(bestDist / 12);
+  for (let i = 1; i < tickCount; i += 1) {
+    const t = (i * 12) / bestDist;
+    const tx = world.jack.x + dx * t;
+    const ty = world.jack.y + dy * t;
+    const tickLen = i % 5 === 0 ? 4.5 : 2.5;
+    ctx.beginPath();
+    ctx.moveTo(tx - perp.x * tickLen, ty - perp.y * tickLen);
+    ctx.lineTo(tx + perp.x * tickLen, ty + perp.y * tickLen);
+    ctx.stroke();
+  }
+
+  // 3. Emblema oficial com a indicação de liderança e a distância em cm
+  const midX = (world.jack.x + overallBest.x) / 2;
+  const midY = (world.jack.y + overallBest.y) / 2 - 14;
+
+  const teamLabel = overallBest.team === "player" ? "SEU" : "IA";
+  const badgeText = `PONTO ${teamLabel} · ${formatDistance(bestDist)}`;
+
+  ctx.font = "800 10px ui-monospace, SFMono-Regular, Menlo, monospace";
+  const textWidth = ctx.measureText(badgeText).width;
+  const badgeW = textWidth + 18;
+  const badgeH = 20;
+
+  roundedRectPath(ctx, midX - badgeW / 2, midY - badgeH / 2, badgeW, badgeH, 6);
+  ctx.fillStyle = overallBest.team === "player" ? "rgba(130, 25, 20, 0.94)" : "rgba(18, 48, 108, 0.94)";
   ctx.fill();
-  ctx.fillStyle = "rgba(255,244,187,0.92)";
-  ctx.font = "800 9px ui-monospace, SFMono-Regular, Menlo, monospace";
+  ctx.strokeStyle = overallBest.team === "player" ? "rgba(252, 165, 165, 0.85)" : "rgba(147, 197, 253, 0.85)";
+  ctx.lineWidth = 1.2;
+  ctx.stroke();
+
+  ctx.fillStyle = "#ffffff";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText(formatDistance(measuredDistance), labelX, labelY);
-  ctx.textAlign = "left";
+  ctx.fillText(badgeText, midX, midY + 0.5);
+
   ctx.restore();
 }
 
@@ -948,6 +1258,11 @@ export default function Bocha() {
   const [aiMode, setAiMode] = useState(null);
   const [moving, setMoving] = useState(false);
   const [powerPct, setPowerPct] = useState(0);
+  const [shotType, setShotType] = useState("ponto"); // "ponto" | "bochada"
+  const shotTypeRef = useRef("ponto");
+  shotTypeRef.current = shotType;
+  const lastCollisionSoundRef = useRef(0);
+  const lastWallSoundRef = useRef(0);
   const [handResult, setHandResult] = useState(null);
   const [handHistory, setHandHistory] = useState([]);
   const [miniSnapshot, setMiniSnapshot] = useState(null);
@@ -1060,6 +1375,9 @@ export default function Bocha() {
     const activeJackAim = jackAimRef.current;
     const isPlayerTurn = turnRef.current === "player" && !movingRef.current && !resultRef.current;
 
+    // Rastro realista de saibro prensado deixado pelas bochas
+    drawSandTrails(ctx, world);
+
     if (!world.jack.placed) {
       drawJackZone(ctx, world, Boolean(activeJackAim));
       if (activeJackAim) drawJackAimGuide(ctx, activeJackAim);
@@ -1071,6 +1389,10 @@ export default function Bocha() {
     if (world.jack.placed) drawJack(ctx, world.jack, { highlight: Boolean(activeAim) });
     if (world.jack.placed) drawMeasurement(ctx, world);
     if (world.jack.placed) drawFocusRing(ctx, world);
+
+    // Partículas de poeira e impacto na cancha
+    drawParticles(ctx, world);
+
     drawReserve(ctx, world);
 
     if (phaseNow === "jack" && !world.jack.placed && turnRef.current === "player") {
@@ -1140,9 +1462,43 @@ export default function Bocha() {
     lastFrameRef.current = currentTime;
     accumulatorRef.current = Math.min(accumulatorRef.current + elapsed, PHYSICS_STEP * MAX_FRAME_STEPS);
 
+    const onCollision = (a, b, force, cx, cy) => {
+      const timestamp = performance.now();
+      if (timestamp - lastCollisionSoundRef.current > 42) {
+        lastCollisionSoundRef.current = timestamp;
+        sfx.bochaClack(clamp(force / 340, 0.25, 1));
+      }
+      const world = worldRef.current;
+      if (world) {
+        if (!world.particles) world.particles = [];
+        const count = clamp(Math.round(force / 45), 3, 7);
+        for (let i = 0; i < count; i += 1) {
+          const ang = Math.random() * Math.PI * 2;
+          const spd = 20 + Math.random() * 85;
+          world.particles.push({
+            x: cx + (Math.random() - 0.5) * 6,
+            y: cy + (Math.random() - 0.5) * 6,
+            vx: Math.cos(ang) * spd,
+            vy: Math.sin(ang) * spd,
+            size: 1 + Math.random() * 2.2,
+            color: Math.random() > 0.4 ? "rgba(225, 150, 95, 0.75)" : "rgba(135, 65, 40, 0.65)",
+            life: 0.7 + Math.random() * 0.4,
+          });
+        }
+      }
+    };
+
+    const onWall = (obj, force) => {
+      const timestamp = performance.now();
+      if (timestamp - lastWallSoundRef.current > 60) {
+        lastWallSoundRef.current = timestamp;
+        sfx.bochaCushion(clamp(force / 260, 0.2, 0.9));
+      }
+    };
+
     let steps = 0;
     while (accumulatorRef.current >= PHYSICS_STEP && steps < MAX_FRAME_STEPS) {
-      stepPhysics(worldRef.current);
+      stepPhysics(worldRef.current, { isLive: true, onCollision, onWall });
       accumulatorRef.current -= PHYSICS_STEP;
       steps += 1;
     }
@@ -1318,12 +1674,31 @@ export default function Bocha() {
     const geometry = getHeadGeometry(world.headSide);
     const launchY = availableLaunchY(world, preferredY);
     const safeDirection = normalize(direction.x * geometry.direction < 0.08 ? geometry.direction * 0.12 : direction.x, direction.y);
-    const safePower = clamp(power, 0.12, 1);
+    const isBochada = mode === "bochaco" || mode === "bochada";
+    const powerMultiplier = isBochada ? 1.25 : 1;
+    const safePower = clamp(power * powerMultiplier, 0.12, 1.25);
     ball.x = geometry.launchX;
     ball.y = launchY;
     ball.vx = safeDirection.x * MAX_SPEED * safePower;
     ball.vy = safeDirection.y * MAX_SPEED * safePower;
-    sfx.hit(safePower);
+    sfx.bochaLaunch(Math.min(1, safePower), isBochada ? "bochada" : "ponto");
+
+    // Poeira e atrito na linha de lançamento da cabeceira
+    if (!world.particles) world.particles = [];
+    for (let i = 0; i < 5; i += 1) {
+      const ang = (Math.PI / 2) * (Math.random() - 0.5) + (geometry.direction > 0 ? 0 : Math.PI);
+      const spd = 20 + Math.random() * 50;
+      world.particles.push({
+        x: ball.x,
+        y: ball.y,
+        vx: Math.cos(ang) * spd,
+        vy: Math.sin(ang) * spd,
+        size: 1 + Math.random() * 2,
+        color: "rgba(220, 145, 95, 0.7)",
+        life: 0.6 + Math.random() * 0.3,
+      });
+    }
+
     ball.played = true;
     ball.active = true;
     world.lastShotId = ball.id;
@@ -1332,7 +1707,7 @@ export default function Bocha() {
     if (team === "player") {
       playerLeftRef.current -= 1;
       setPlayerLeft(playerLeftRef.current);
-      setMessage("Sua bocha está rolando. A próxima vez será de quem estiver mais distante.");
+      setMessage(isBochada ? "Bochada desferida com força total!" : "Sua bocha está rolando com peso medido para arrimo.");
     } else {
       aiLeftRef.current -= 1;
       setAiLeft(aiLeftRef.current);
@@ -1579,14 +1954,16 @@ export default function Bocha() {
     const inwardX = rawX * geometry.direction >= 12 ? rawX : geometry.direction * 12;
     const dir = normalize(inwardX, rawY);
     const power = clamp(Math.hypot(rawX, rawY) / PULL_MAX, 0, 1);
+    const isBochada = shotTypeRef.current === "bochada";
+    const effectivePower = isBochada ? Math.min(1.25, power * 1.25) : power;
     const prediction = simulateShot(world, {
       team: "player",
       launchX: geometry.launchX,
       launchY: current.anchor.y,
       direction: dir,
-      power: Math.max(0.12, power),
+      power: Math.max(0.12, effectivePower),
     });
-    aimRef.current = { ...current, point, dir, power, prediction };
+    aimRef.current = { ...current, point, dir, power, effectivePower, prediction, shotType: shotTypeRef.current };
     setPowerPct(Math.round(power * 100));
     drawRef.current?.();
   };
@@ -1659,7 +2036,7 @@ export default function Bocha() {
       drawRef.current?.();
       return;
     }
-    fireShot(turnRef.current, current.anchor.y, current.dir, current.power, "manual");
+    fireShot(turnRef.current, current.anchor.y, current.dir, current.power, shotTypeRef.current);
   };
 
   const onPointerCancel = (event) => {
@@ -1935,9 +2312,47 @@ export default function Bocha() {
               </button>
             )}
           </div>
-          <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm ${turn === "player" && !moving && !aiThinking ? "border-orange-300/30 bg-orange-400/10 text-orange-100" : "border-white/10 bg-white/5 text-white/60"}`} role="status" aria-live="polite">
-            {aiThinking ? <BrainCircuit className="h-4 w-4 animate-pulse" /> : <CircleDot className="h-4 w-4" />}
-            {statusText}
+
+          <div className="flex flex-wrap items-center gap-2">
+            {phase === "balls" && !result && (
+              <div className="flex items-center rounded-full border border-orange-200/20 bg-stone-900/80 p-1 shadow-inner backdrop-blur-sm">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShotType("ponto");
+                    sfx.click();
+                  }}
+                  className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold transition ${
+                    shotType === "ponto"
+                      ? "bg-amber-400 text-stone-950 shadow-sm"
+                      : "text-white/60 hover:text-white"
+                  }`}
+                  title="Arrimada / Ponto: aproximação suave e controlada para colar no bolim"
+                >
+                  <Target className="h-3.5 w-3.5" /> Arrimo (Ponto)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShotType("bochada");
+                    sfx.click();
+                  }}
+                  className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold transition ${
+                    shotType === "bochada"
+                      ? "bg-gradient-to-r from-orange-500 to-red-500 text-white shadow-sm"
+                      : "text-white/60 hover:text-white"
+                  }`}
+                  title="Bochada / Tiro: arremesso forte e rasteiro para deslocar a bocha adversária"
+                >
+                  <Flame className="h-3.5 w-3.5" /> Bochada (Tiro)
+                </button>
+              </div>
+            )}
+
+            <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm ${turn === "player" && !moving && !aiThinking ? "border-orange-300/30 bg-orange-400/10 text-orange-100" : "border-white/10 bg-white/5 text-white/60"}`} role="status" aria-live="polite">
+              {aiThinking ? <BrainCircuit className="h-4 w-4 animate-pulse" /> : <CircleDot className="h-4 w-4" />}
+              {statusText}
+            </div>
           </div>
         </div>
 
@@ -1981,7 +2396,7 @@ export default function Bocha() {
 
         <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-xs text-white/45">
           <span>{message || (phase === "jack" ? "Arraste da cabeceira para marcar o bolim." : moving ? "A física está resolvendo paredes e colisões..." : "Arraste para trás da linha e solte para lançar.")}</span>
-          <span className="tabular-nums">Força máxima dentro do gesto · {Math.round(PULL_MAX)} u</span>
+          <span className="tabular-nums font-medium text-amber-200/80">{shotType === "bochada" ? "💥 Modo Bochada · Tiro potente ativo" : "🎯 Modo Arrimo · Aproximação suave"}</span>
         </div>
         <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-black/30 ring-1 ring-white/10">
           <div className="h-full bg-gradient-to-r from-orange-300 via-red-400 to-blue-400 transition-[width]" style={{ width: `${(playedCount / 8) * 100}%` }} />
@@ -2057,13 +2472,13 @@ export default function Bocha() {
         </div>
 
         <div className="glass rounded-2xl p-5 text-sm text-white/55">
-          <div className="mb-3 flex items-center gap-2 font-medium text-white/85"><CircleDot className="h-4 w-4 text-amber-200" /> Como jogar</div>
+          <div className="mb-3 flex items-center gap-2 font-medium text-white/85"><CircleDot className="h-4 w-4 text-amber-200" /> Tradição e Regras da Bocha</div>
           <ul className="list-inside list-disc space-y-2">
-            <li>Toque ou arraste na zona marcada para posicionar o bolim. Quem vence a mão posiciona o próximo bolim, na cabeceira oposta.</li>
-            <li>Depois, puxe para trás da linha e solte. O gesto capturado chega a 100% sem precisar sair do canvas.</li>
-            <li>São 4 bolas por equipe. Após cada parada, joga a equipe mais distante do bolim.</li>
-            <li>No fim da mão, cada bola vencedora mais perto que a melhor adversária vale 1 ponto.</li>
-            <li>Empate de mão não dá ponto; a cabeceira alterna na mão seguinte.</li>
+            <li><strong className="text-amber-100">Posicione o Bolim:</strong> Toque ou arraste na zona válida da cabeceira oposta para fixar o alvo da mão.</li>
+            <li><strong className="text-amber-100">Arrimo (Ponto):</strong> Lançamento suave com controle fino de peso para colar a bocha ao lado do bolim.</li>
+            <li><strong className="text-amber-100">Bochada (Tiro):</strong> Arremesso de impacto máximo para atingir e expulsar a bocha adversária do raio do ponto.</li>
+            <li><strong className="text-amber-100">Dinâmica da Cancha:</strong> São 4 bochas por equipe. Joga sempre quem estiver mais distante do bolim no momento.</li>
+            <li><strong className="text-amber-100">Medição com Trena:</strong> A trena afere a distância em centímetros. No fim da mão, cada bocha sua mais perto que a melhor adversária vale 1 ponto (partida até 7).</li>
           </ul>
         </div>
 

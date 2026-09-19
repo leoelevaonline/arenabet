@@ -133,6 +133,31 @@ export const sfx = {
     tone({ freq: 170 + strength * 70, type: "square", duration: 0.05, gain: strength * 0.16 });
     noise({ duration: 0.05, gain: strength * 0.22, type: "highpass", frequency: 1300 });
   },
+  bochaLaunch: (power = 0.5, shotType = "ponto") => {
+    const p = clamp(power, 0.1, 1);
+    if (shotType === "bochada") {
+      // Arremesso forte e seco com projeção na terra batida
+      tone({ freq: 110 + p * 60, freqTo: 45, type: "triangle", duration: 0.14, gain: 0.28 * p });
+      noise({ duration: 0.16, gain: 0.32 * p, type: "bandpass", frequency: 450 });
+    } else {
+      // Arrimo / Ponto: deslizamento suave no saibro
+      tone({ freq: 140, freqTo: 70, type: "sine", duration: 0.12, gain: 0.18 * p });
+      noise({ duration: 0.2, gain: 0.18 * p, type: "lowpass", frequency: 650 });
+    }
+  },
+  bochaClack: (intensity = 0.8) => {
+    // Som encorpado e oco de bochas de resina pesada se chocando (o clássico estalo da bocha gaúcha)
+    const strength = clamp(intensity, 0.15, 1);
+    tone({ freq: 360 + Math.random() * 40, freqTo: 140, type: "triangle", duration: 0.07, gain: strength * 0.35 });
+    tone({ freq: 180, freqTo: 60, type: "sine", duration: 0.1, gain: strength * 0.32, delay: 0.005 });
+    noise({ duration: 0.04, gain: strength * 0.38, type: "bandpass", frequency: 1600 });
+  },
+  bochaCushion: (intensity = 0.5) => {
+    // Impacto sutil e abafado na madeira nobre da lateral da cancha
+    const strength = clamp(intensity, 0.1, 1);
+    tone({ freq: 95, freqTo: 40, type: "sine", duration: 0.11, gain: strength * 0.25 });
+    noise({ duration: 0.08, gain: strength * 0.2, type: "lowpass", frequency: 320 });
+  },
   rail: () => tone({ freq: 130, type: "square", duration: 0.06, gain: 0.09 }),
   pocket: () => {
     tone({ freq: 300, freqTo: 90, type: "sine", duration: 0.22, gain: 0.2 });
