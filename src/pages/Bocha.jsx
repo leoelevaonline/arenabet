@@ -1711,7 +1711,7 @@ export default function Bocha() {
     } else {
       aiLeftRef.current -= 1;
       setAiLeft(aiLeftRef.current);
-      setMessage(`IA lançou ${mode === "bochaco" ? "um bochaço" : "uma aproximação"}.`);
+      setMessage("A IA realizou seu lançamento.");
     }
     aimRef.current = null;
     setPowerPct(0);
@@ -1890,7 +1890,7 @@ export default function Bocha() {
     if (!match || result || phase !== "balls" || turn !== "ai" || moving || isHumanOpponent(opponent)) return undefined;
     if (aiTimerRef.current) window.clearTimeout(aiTimerRef.current);
     setAiThinking(true);
-    setMessage("IA mede as distâncias e simula aproximação e bochaço...");
+    setMessage("Vez da IA...");
     aiTimerRef.current = window.setTimeout(() => {
       aiTimerRef.current = null;
       if (resultRef.current || phaseRef.current !== "balls" || turnRef.current !== "ai" || movingRef.current) return;
@@ -2287,7 +2287,7 @@ export default function Bocha() {
       : moving
         ? `Bolas rolando${worldRef.current?.lastShotMode === "bochaco" ? " · bochaço" : ""}`
         : aiThinking
-          ? phase === "jack" ? "IA posiciona o bolim" : "IA pensa e simula"
+          ? phase === "jack" ? "IA posiciona o bolim" : "Vez da IA"
           : phase === "jack"
             ? "Posicione o bolim"
             : turn === "player"
@@ -2458,7 +2458,7 @@ export default function Bocha() {
           </div>
           <div className={`mt-3 flex items-center gap-2 rounded-xl border px-3 py-2 text-sm ${aiThinking ? "border-blue-300/25 bg-blue-400/10 text-blue-100" : "border-white/10 bg-black/10 text-white/60"}`}>
             {aiThinking ? <BrainCircuit className="h-4 w-4 animate-pulse" /> : <Target className="h-4 w-4" />}
-            {aiThinking ? "IA mede e simula a próxima jogada..." : aiMode ? `Último plano da IA: ${aiMode === "bochaco" ? "bochaço" : "aproximação"}` : "A equipe mais distante joga."}
+            {aiThinking ? "Vez da IA..." : "A equipe mais distante joga."}
           </div>
         </div>
 
@@ -2480,11 +2480,6 @@ export default function Bocha() {
             <li><strong className="text-amber-100">Dinâmica da Cancha:</strong> São 4 bochas por equipe. Joga sempre quem estiver mais distante do bolim no momento.</li>
             <li><strong className="text-amber-100">Medição com Trena:</strong> A trena afere a distância em centímetros. No fim da mão, cada bocha sua mais perto que a melhor adversária vale 1 ponto (partida até 7).</li>
           </ul>
-        </div>
-
-        <div className="rounded-2xl border border-blue-300/10 bg-blue-400/5 p-4 text-xs text-blue-100/60">
-          <div className="font-medium text-blue-100/90">IA · dificuldade controlada {Math.round(AI_DIFFICULTY * 100)}%</div>
-          <p className="mt-1">Ela escolhe aproximação ou bochaço conforme a distância, testa potências no mesmo motor físico e aplica um erro limitado antes de lançar.</p>
         </div>
 
         <div className="rounded-2xl border border-amber-300/10 bg-amber-400/5 p-4 text-xs text-amber-100/60">

@@ -1445,7 +1445,7 @@ export default function Sinuca() {
       const shot = applyAiError(plan, aiShotNumberRef.current);
       aiShotNumberRef.current += 1;
       setAiThinking(false);
-      setMessage(`IA: bola ${plan.target.number} mirando ${plan.pocket?.label || "uma jogada de segurança"}.`);
+      setMessage("A IA realizou sua tacada.");
       fireShot("ai", shot.direction, shot.power, plan.pocket?.id || null);
     }, 820);
   }
@@ -1897,7 +1897,7 @@ export default function Sinuca() {
           </div>
           <div className={`mt-3 flex items-center gap-2 rounded-xl border px-3 py-2 text-sm ${aiThinking ? "border-rose-300/25 bg-rose-400/10 text-rose-100" : "border-white/10 bg-black/10 text-white/60"}`}>
             {aiThinking ? <BrainCircuit className="h-4 w-4 animate-pulse" /> : <Target className="h-4 w-4" />}
-            {aiThinking ? "Calculando bola, caçapa e ponto fantasma..." : `${sideLabel(turn, opponent)} · mire pela branca`}
+            {aiThinking ? "Vez da IA..." : `${sideLabel(turn, opponent)} · mire pela branca`}
           </div>
         </div>
 

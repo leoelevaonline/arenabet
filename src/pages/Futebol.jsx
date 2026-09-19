@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useOutletContext } from "react-router-dom";
 import {
   ArrowLeft,
-  Bot,
   CircleDot,
   Coins,
   Crosshair,
@@ -1913,7 +1912,7 @@ export default function Futebol() {
     );
   }
 
-  const statusText = message || (aiThinking ? "Bot calculando..." : `${sideLabel(turn, opponent)}: arraste um disco ${turn === "player" ? "azul" : "vermelho"}`);
+  const statusText = message || (aiThinking ? "Vez da IA..." : `${sideLabel(turn, opponent)}: arraste um disco ${turn === "player" ? "azul" : "vermelho"}`);
   const topMobileLabel = vertical ? "Gol da IA · ataque azul" : "";
 
   return (
@@ -1983,11 +1982,7 @@ export default function Futebol() {
               <li>Empate na série devolve a aposta.</li>
               <li>Arraste um disco azul para trás; a força é proporcional ao recuo.</li>
             </ul>
-          </div>
-          <div className="rounded-2xl border border-white/10 bg-[#091712]/70 p-4 text-sm text-white/55 sm:p-5">
-            <div className="mb-3 flex items-center gap-2 font-semibold text-white/85"><Bot className="h-4 w-4 text-rose-300" /> Leitura da IA</div>
-            <p className="leading-relaxed">A vermelha compara discos, ângulos e potências em simulações curtas. Ela tenta gol, assistência ou cobertura e recebe ruído controlado para não jogar como um robô perfeito.</p>
-            <div className="mt-4 flex items-center gap-2 rounded-xl border border-emerald-400/15 bg-emerald-400/[0.06] px-3 py-2.5 text-xs text-emerald-100/70"><ShieldCheck className="h-4 w-4 text-emerald-300" /> Física fixa em 120 Hz + substeps</div>
+            <div className="mt-4 flex items-center gap-2 rounded-xl border border-emerald-400/15 bg-emerald-400/[0.06] px-3 py-2 text-xs text-emerald-100/70"><ShieldCheck className="h-4 w-4 text-emerald-300" /> Física fixa em 120 Hz + substeps</div>
           </div>
           {error && <div className="rounded-xl border border-rose-400/20 bg-rose-500/10 p-3 text-sm text-rose-200" role="alert">{error}</div>}
         </aside>
