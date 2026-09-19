@@ -101,9 +101,24 @@ export async function getHouseConfig() {
   });
 }
 
+export function parseDisabledGames(config) {
+  const raw = config?.games_disabled;
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw;
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
 export async function placeBet(amount, game) {
   const wager = normalizeTransactionAmount(amount);
   const config = await getHouseConfig();
+  if (parseDisabledGames(config).includes(game)) {
+    throw new Error("Este jogo está temporariamente indisponível.");
+  }
   if (wager < Number(config.min_bet)) throw new Error(`Aposta mínima: ${config.min_bet}`);
   if (wager > Number(config.max_bet)) throw new Error(`Aposta máxima: ${config.max_bet}`);
 

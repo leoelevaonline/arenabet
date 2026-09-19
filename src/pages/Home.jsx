@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { Link, useOutletContext } from "react-router-dom";
 import { Image } from "@/components/ui/image";
 import { Coins, Lock, TrendingUp, ChevronRight, Zap, Trophy, ArrowRight, Bot, Users, QrCode, ShieldCheck, Scale, HeartHandshake } from "lucide-react";
-import { getBalance, getHouseConfig } from "@/lib/wallet";
+import { getBalance, getHouseConfig, parseDisabledGames } from "@/lib/wallet";
 import { getOnlinePlayers } from "@/lib/players";
 import { formatBRL } from "@/lib/money";
 import heroImage from "@/assets/arena-hero.svg";
@@ -44,6 +44,12 @@ export default function Home() {
     const t = setInterval(() => setPlayers(getOnlinePlayers()), 15000);
     return () => clearInterval(t);
   }, []);
+
+  const disabledGames = useMemo(() => parseDisabledGames(config), [config]);
+  const activeGames = useMemo(
+    () => games.map((g) => ({ ...g, available: g.available && !disabledGames.includes(g.key) })),
+    [disabledGames],
+  );
 
   const onlineCount = players.length;
   const playersByGame = useMemo(() => players.reduce((acc, player) => {
@@ -150,7 +156,7 @@ export default function Home() {
           </span>
         </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {games.map((g) => (
+          {activeGames.map((g) => (
             <Link
               key={g.key}
               to={g.available ? g.to : "#"}
