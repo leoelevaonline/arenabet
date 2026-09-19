@@ -615,8 +615,137 @@ const entities = new Proxy({}, {
   get: (_target, entityName) => entityApi(String(entityName)),
 });
 
+const roundCredits = (value) => Math.round(Number(value) * 100) / 100;
+
+const updateUserRow = async (userId, changes) => {
+  const safe = { ...changes, updated_date: now() };
+  delete safe.id;
+  delete safe.password_hash;
+
+  let updated = null;
+  try {
+    const { data, error } = await supabase
+      .from("arenabet_users")
+      .update(safe)
+      .eq("id", userId)
+      .select()
+      .maybeSingle();
+    if (!error && data) updated = data;
+  } catch (e) {
+    console.warn("[ArenaBet] updateUserRow falhou:", e);
+  }
+
+  const database = loadDatabase();
+  const idx = database.users.findIndex((u) => u.id === userId);
+  if (idx >= 0) {
+    database.users[idx] = { ...database.users[idx], ...safe, ...(updated || {}) };
+    saveDatabase(database);
+    return publicUser(database.users[idx]);
+  }
+  if (updated) {
+    database.users.push(updated);
+    saveDatabase(database);
+    return publicUser(updated);
+  }
+  throw new Error("Usuário não encontrado");
+};
+
+const requireAdmin = async () => {
+  const me = await auth.me();
+  if (me?.role !== "admin") throw new Error("Acesso restrito à administração");
+  return me;
+};
+
+export const admin = {
+  async listUsers() {
+    await requireAdmin();
+    try {
+      const { data, error } = await supabase
+        .from("arenabet_users")
+        .select("id, full_name, email, cpf, phone, birth_date, role, balance, created_date")
+        .order("created_date", { ascending: false });
+      if (!error && data) {
+        return data.map((u) => ({ ...u, balance: Number(u.balance ?? 0) }));
+      }
+    } catch (e) {
+      console.warn("[ArenaBet] admin.listUsers falhou:", e);
+    }
+    const database = loadDatabase();
+    return database.users.map((u) => publicUser(u));
+  },
+
+  async setRole(userId, role) {
+    await requireAdmin();
+    if (!["user", "admin"].includes(role)) throw new Error("Papel inválido");
+    return updateUserRow(userId, { role });
+  },
+
+  async setBalance(userId, value) {
+    await requireAdmin();
+    const balance = roundCredits(value);
+    if (!Number.isFinite(balance) || balance < 0) throw new Error("Saldo inválido");
+    return updateUserRow(userId, { balance });
+  },
+
+  async adjustBalance(userId, delta, description = "Ajuste manual da administração") {
+    await requireAdmin();
+    const amount = roundCredits(delta);
+    if (!Number.isFinite(amount) || amount === 0) throw new Error("Informe um valor diferente de zero");
+
+    let current = null;
+    try {
+      const { data } = await supabase
+        .from("arenabet_users")
+        .select("balance")
+        .eq("id", userId)
+        .maybeSingle();
+      if (data) current = Number(data.balance ?? 0);
+    } catch {
+      // fallback below
+    }
+    if (current == null) {
+      const database = loadDatabase();
+      const u = database.users.find((x) => x.id === userId);
+      current = Number(u?.balance ?? 0);
+    }
+
+    const balance_before = roundCredits(current);
+    const balance_after = roundCredits(balance_before + amount);
+    if (balance_after < 0) throw new Error("O ajuste deixaria o saldo negativo");
+
+    await updateUserRow(userId, { balance: balance_after });
+
+    const tx = {
+      id: createId(),
+      user_id: userId,
+      created_by: userId,
+      type: amount > 0 ? "deposit" : "withdrawal",
+      amount,
+      method: "admin",
+      status: "completed",
+      description,
+      balance_before,
+      balance_after,
+      created_date: now(),
+      updated_date: now(),
+    };
+    try {
+      await supabase.from("arenabet_transactions").insert(tx);
+    } catch (e) {
+      console.warn("[ArenaBet] admin.adjustBalance tx falhou:", e);
+    }
+    const database = loadDatabase();
+    database.entities.Transaction ||= [];
+    database.entities.Transaction.push(tx);
+    saveDatabase(database);
+
+    return balance_after;
+  },
+};
+
 export const db = {
   auth,
+  admin,
   atomic,
   entities,
 };
