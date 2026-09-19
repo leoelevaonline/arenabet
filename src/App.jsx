@@ -5,6 +5,7 @@ import { queryClientInstance } from "@/lib/query-client";
 import AppShell from "@/components/AppShell";
 import ScrollToTop from "@/components/ScrollToTop";
 import PageNotFound from "@/lib/PageNotFound";
+import RequireAdmin from "@/components/RequireAdmin";
 import Admin from "@/pages/Admin";
 import Auth from "@/pages/Auth";
 import Bocha from "@/pages/Bocha";
@@ -37,7 +38,7 @@ function App() {
             <Route path="/xadrez" element={<Xadrez />} />
             <Route path="/wallet" element={<Wallet />} />
             <Route path="/cashier" element={<Cashier />} />
-            <Route path="/admin" element={<Admin />} />
+            <Route path="/admin" element={<RequireAdmin><Admin /></RequireAdmin>} />
           </Route>
           <Route path="*" element={<PageNotFound />} />
         </Routes>
